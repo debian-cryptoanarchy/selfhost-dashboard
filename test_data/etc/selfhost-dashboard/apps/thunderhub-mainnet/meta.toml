@@ -1,0 +1,3 @@
+user_friendly_name = "Thunderhub"
+admin_only = true
+entry_point = "Dynamic"

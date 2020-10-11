@@ -1,0 +1,27 @@
+[general]
+conf_file_param = "conf"
+
+[[param]]
+name = "bind_port"
+type = "u16"
+optional = false
+doc = "Port number for webserver to listen on"
+
+[[param]]
+name = "root_path"
+type = "String"
+doc = "Root path"
+default = "\"/dashboard\".to_owned()"
+
+[[param]]
+name = "pg_uri"
+type = "String"
+doc = "Postgres URI/connection string"
+optional = false
+
+[[param]]
+name = "log_level"
+type = "crate::LogLevel"
+doc = "Logging level"
+convert_into = "sloggers::types::Severity"
+default = "crate::LogLevel::Info"

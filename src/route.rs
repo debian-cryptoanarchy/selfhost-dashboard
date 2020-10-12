@@ -2,7 +2,7 @@ use std::path::Path;
 use crate::webserver::{Request, HttpMethod};
 use std::future::Future;
 use std::sync::Arc;
-use slog::{error};
+use slog::{error, warn, debug, trace};
 
 #[cfg(not(feature = "mock_system"))]
 const STATIC_DIR: &'static str = "/usr/share/selfhost-dashboard/static";
@@ -12,12 +12,12 @@ const STATIC_DIR: &'static str = "./static";
 
 fn bail_to_login<S: crate::webserver::Server>(message: &str, logger: slog::Logger) -> S::ResponseBuilder {
     error!(logger, "login failed"; "reason" => message);
-    serve_static::<S>("login.html", "text/html", logger)
+    serve_static::<S>("login.html", Some("text/html"), logger)
 }
 
 fn bail_to_login_with_err<E: std::fmt::Display, S: crate::webserver::Server>(message: &str, error: &E, logger: slog::Logger) -> S::ResponseBuilder {
     error!(logger, "login failed"; "reason" => message, "error" => %error);
-    serve_static::<S>("login.html", "text/html", logger)
+    serve_static::<S>("login.html", Some("text/html"), logger)
 }
 
 fn internal_server_error<S: crate::webserver::Server>() -> S::ResponseBuilder {
@@ -28,10 +28,55 @@ fn internal_server_error<S: crate::webserver::Server>() -> S::ResponseBuilder {
     builder
 }
 
-pub fn serve_static<S: crate::webserver::Server>(resource: &str, content_type: &str, logger: slog::Logger) -> S::ResponseBuilder {
+fn scan_content_type<P: AsRef<Path>>(file_path: P, logger: &slog::Logger) -> Result<String, ()> {
+    let output = std::process::Command::new("file")
+        .arg("-i")
+        .arg(file_path.as_ref())
+        .output()
+        .map_err(|error| error!(logger, "failed to execute file"; "error" => %error))?;
+
+    if !output.status.success() {
+        error!(logger, "file -i {} failed", file_path.as_ref().display(); "exit_code" => %output.status);
+        return Err(())
+    }
+
+    String::from_utf8(output.stdout)
+        .map_err(|error| error!(logger, "failed to decode content type"; "error" => %error))
+        .map(|mut content_type| {
+            content_type.retain(|c| c != '\n');
+            content_type
+        })
+}
+
+pub fn serve_static<S: crate::webserver::Server>(resource: &str, content_type: Option<&str>, logger: slog::Logger) -> S::ResponseBuilder {
     use crate::webserver::ResponseBuilder;
  
-    let file_contents = std::fs::read_to_string(Path::new("/usr/share/selfhost-dashboard/static").join(resource));
+    // We must NOT use Path::join because that function would replace the path if it's
+    // absolute.
+    let abs_path = format!("{}/{}", STATIC_DIR, resource);
+    let logger = logger.new(slog::o!("static_file_path" => abs_path.clone()));
+    debug!(logger, "Attempting to serve a file");
+    // This is to return 404 instead of 500
+    if !Path::new(&abs_path).exists() {
+        return not_found::<S>();
+    }
+
+    let content_type_owned;
+    let content_type = match content_type {
+        Some(content_type) => content_type,
+        None => {
+            let result = scan_content_type(&abs_path, &logger);
+            content_type_owned = match result {
+                Ok(content_type) => content_type,
+                Err(_) => return internal_server_error::<S>(),
+            };
+            &content_type_owned
+        },
+    };
+
+    debug!(logger, "scanned content type"; "content_type" => content_type);
+
+    let file_contents = std::fs::read_to_string(abs_path);
     let file_contents = match file_contents {
         Ok(file_contents) => file_contents,
         Err(error) => {
@@ -68,23 +113,35 @@ pub fn route<S: crate::webserver::Server, Db: 'static + crate::login::UserDb + S
             return not_found::<S>();
         };
 
-        let component = if path.is_empty() {
-            ""
+        let (component, remaining) = if path.is_empty() {
+            ("", "")
         } else {
             match path[1..].find('/') {
-                Some(idx) => &path[..(idx + 1)],
-                None => path,
+                Some(idx) => (&path[..(idx + 1)], &path[(idx + 2)..]),
+                None => (path, ""),
             }
         };
+
+        trace!(logger, "about to route"; "component" => component, "remaining" => remaining);
 
         match (component, request.method()) {
             ("", HttpMethod::Get) | ("/", HttpMethod::Get) => {
                 // There's nothing secret here, but redirecting the user immediately is a better
                 // UX.
                 match crate::login::auth_request::<_, S>(&prefix, &mut user_db, request, logger.clone()).await {
-                    Ok(_) => serve_static::<S>("index.html", "text/html", logger),
+                    Ok(_) => serve_static::<S>("index.html", Some("text/html"), logger),
                     Err(response) => response,
                 }
+            },
+            ("/static", HttpMethod::Get) => {
+                // Protect against directory traversal attacks
+                // We assume no bad symlinks because we control the contents of directories
+                if remaining.starts_with("../") || remaining.ends_with("/..") || remaining.contains("/../") {
+                    warn!(logger, "directory traversal detected");
+                    return not_found::<S>();
+                }
+
+                serve_static::<S>(remaining, None, logger)
             },
             ("/apps", HttpMethod::Get) => {
                 let user = match crate::login::auth_request::<_, S>(&prefix, &mut user_db, request, logger.clone()).await {
@@ -94,7 +151,7 @@ pub fn route<S: crate::webserver::Server, Db: 'static + crate::login::UserDb + S
 
                 crate::apps::get_apps::<S>(&user, &prefix, &apps)
             },
-            ("/login", HttpMethod::Get) => serve_static::<S>("login.html", "text/html", logger),
+            ("/login", HttpMethod::Get) => serve_static::<S>("login.html", Some("text/html"), logger),
             ("/login", HttpMethod::Post) => {
                 use crate::login::LoginError;
 

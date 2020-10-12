@@ -1,3 +1,14 @@
 #!/bin/bash
 
-echo -n "?access-key=orangecoingood"
+network=mainnet
+
+if [ "$1" '!=' "admin" ];
+then
+	echo 'Only admins are allowed to access Thunderhub' >&2
+	exit 1
+fi
+
+root_path="`grep '^root_path:' "/etc/selfhost/apps/thunderhub-system-$network.conf"`" || exit 2
+root_path="`echo "$root_path" | sed 's/^root_path: *"\(.*\)"$/\1/'`" || exit 2
+token="`cat "/var/run/thunderhub-system-$network/sso/cookie"`" || exit 2
+echo -n "$root_path?token=$token"

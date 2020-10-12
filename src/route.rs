@@ -91,6 +91,50 @@ pub fn serve_static<S: crate::webserver::Server>(resource: &str, content_type: O
     builder
 }
 
+fn open_dynamic<S: crate::webserver::Server>(app_name: &str, user: &crate::login::AuthenticatedUser, logger: &slog::Logger) -> Result<String, S::ResponseBuilder> {
+    use crate::webserver::ResponseBuilder;
+
+    // Prevent various attacks
+    if app_name.chars().any(|c| c != '-' && (c < 'a' || c > 'z')) {
+        let mut builder = S::ResponseBuilder::with_status(400);
+        builder.set_body("Invalid app name, only lower case letters and dashes are allowed.".to_owned());
+        return Err(builder);
+    }
+
+    let entry_point_path = format!("{}/{}/open", crate::apps::config::DIRS.app_entry_points, app_name);
+    let output = std::process::Command::new(&entry_point_path)
+        .arg(user.name())
+        .output()
+        .map_err(|error| {
+            error!(logger, "failed to execute entry point"; "error" => %error, "entry_point_path" => entry_point_path);
+            internal_server_error::<S>()
+        })?;
+
+    if !output.status.success() {
+        let is_internal = match (output.status.code(), String::from_utf8(output.stderr)) {
+            (Some(1), Ok(message)) => { error!(logger, "access to app rejected"; "exit_code" => %output.status, "message" => message); false },
+            (Some(1), Err(_)) => { error!(logger, "access to app rejected (invalid debug message)"; "exit_code" => %output.status); false },
+            (Some(other), Ok(message)) => { error!(logger, "access to app failed"; "exit_code" => %output.status, "message" => message); true },
+            (Some(other), Err(_)) => { error!(logger, "access to app failed (invalid debug message)"; "exit_code" => %output.status); true },
+            (None, Ok(message)) => { error!(logger, "entry point killed by a signal"; "exit_code" => %output.status, "message" => message); true },
+            (None, Err(_)) => { error!(logger, "entry point killed by a signaled (invalid debug message)"; "exit_code" => %output.status); true },
+        };
+
+        return Err(if is_internal {
+            internal_server_error::<S>()
+        } else {
+            let mut builder = S::ResponseBuilder::with_status(403);
+            builder.set_body("You are not allowed to access this application".to_owned());
+            builder
+        });
+    }
+
+    String::from_utf8(output.stdout).map_err(|error| {
+        error!(logger, "failed to decode url suffix"; "error" => %error);
+        internal_server_error::<S>()
+    })
+}
+
 fn not_found<S: crate::webserver::Server>() -> S::ResponseBuilder {
     use crate::webserver::ResponseBuilder;
 
@@ -206,6 +250,45 @@ pub fn route<S: crate::webserver::Server, Db: 'static + crate::login::UserDb + S
                     Err(LoginError::DbGetUserError(error)) => bail_to_login_with_err::<_, S>("failed to retrieve the user", &error, logger),
                     Err(LoginError::DbSetCookieError(error)) => bail_to_login_with_err::<_, S>("failed to set authentication cookie", &error, logger),
                 }
+            },
+            ("/open_app", HttpMethod::Get) => {
+                use crate::apps::config::EntryPoint;
+
+                let app_name = remaining.to_owned();
+
+                let logger = logger.new(slog::o!("app" => app_name.clone()));
+
+                let user = match crate::login::auth_request::<_, S>(&prefix, &mut user_db, request, logger.clone()).await {
+                    Ok(user) => user,
+                    Err(response) => return response,
+                };
+
+                let app = match apps.get(&app_name) {
+                    Some(app) => app,
+                    None => {
+                        return not_found::<S>();
+                    },
+                };
+
+                if app.admin_only && !user.is_admin() {
+                    let mut builder = S::ResponseBuilder::with_status(403);
+                    builder.set_body("Non-admins are not authorized to open admin-only apps".to_owned());
+                    return builder;
+                }
+
+                let owned_url;
+                let url = match &app.entry_point {
+                    EntryPoint::Static { url, } => url,
+                    EntryPoint::Dynamic => {
+                        owned_url = match open_dynamic::<S>(&app_name, &user, &logger) {
+                            Ok(url) => url,
+                            Err(response) => return response,
+                        };
+                        &owned_url
+                    },
+                };
+
+                S::ResponseBuilder::redirect(url, crate::webserver::RedirectKind::Temporary)
             },
             ("/logout", HttpMethod::Get) => {
                 let user = match crate::login::auth_request::<_, S>(&prefix, &mut user_db, request, logger.clone()).await {

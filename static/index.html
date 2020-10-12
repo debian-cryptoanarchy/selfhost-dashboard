@@ -5,5 +5,32 @@
 	<body>
 		<p>Hello world!</p>
 		<p>This site will be loaded after logging in.</p>
+		<ul id="apps">
+		</ul>
+		<script type="application/javascript">
+			var path = window.location.pathname;
+			var idx = path.indexOf('/', 1);
+			if(idx < 0) {
+				root_path = path;
+			} else {
+				root_path = path.substr(0, idx);
+			}
+			console.log(root_path);
+
+			var xhr = new XMLHttpRequest();
+			xhr.onreadystatechange = function() {
+				if (xhr.readyState === 4) {
+					var response = JSON.parse(xhr.responseText);
+					var apps_html = ""
+					for (app of response.apps) {
+						console.log(app);
+						apps_html += "<li><a href=\"" + app.url + "\">" + app.name + "</li>"
+					}
+					document.getElementById("apps").innerHTML = apps_html;
+				}
+			}
+			xhr.open('GET', root_path + '/apps');
+			xhr.send()
+		</script>
 	</body>
 </html>

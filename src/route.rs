@@ -2,7 +2,7 @@ use std::path::Path;
 use crate::webserver::{Request, HttpMethod};
 use std::future::Future;
 use std::sync::Arc;
-use slog::{error, warn, debug, trace};
+use slog::{error, warn, info, debug, trace};
 
 #[cfg(not(feature = "mock_system"))]
 const STATIC_DIR: &'static str = "/usr/share/selfhost-dashboard/static";
@@ -205,6 +205,28 @@ pub fn route<S: crate::webserver::Server, Db: 'static + crate::login::UserDb + S
                     },
                     Err(LoginError::DbGetUserError(error)) => bail_to_login_with_err::<_, S>("failed to retrieve the user", &error, logger),
                     Err(LoginError::DbSetCookieError(error)) => bail_to_login_with_err::<_, S>("failed to set authentication cookie", &error, logger),
+                }
+            },
+            ("/logout", HttpMethod::Get) => {
+                let user = match crate::login::auth_request::<_, S>(&prefix, &mut user_db, request, logger.clone()).await {
+                    Ok(user) => user,
+                    Err(response) => return response,
+                };
+
+                let logger = logger.new(slog::o!("user_name" => user.name().to_owned()));
+
+                match user.logout(&mut user_db).await {
+                    Ok(_) => {
+                        info!(logger, "user logged out");
+                        let mut builder = S::ResponseBuilder::redirect(&format!("{}/login", prefix), crate::webserver::RedirectKind::SeeOther);
+                        builder.set_cookie("user_name", "", Some(0));
+                        builder.set_cookie("auth_token", "", Some(0));
+                        builder
+                    },
+                    Err(error) => {
+                        error!(logger, "failed to log out"; "error" => %error);
+                        internal_server_error::<S>()
+                    },
                 }
             },
             _ => not_found::<S>(),

@@ -323,8 +323,18 @@ pub struct AuthenticatedUser {
 }
 
 impl AuthenticatedUser {
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
     pub fn is_admin(&self) -> bool {
         self.name == ADMIN_USER_NAME
+    }
+
+    pub async fn logout<Db: UserDb>(&self, database: &mut Db) -> Result<(), Db::SetCookieError> {
+        database
+            .set_cookie(&self.name, None)
+            .await
     }
 }
 

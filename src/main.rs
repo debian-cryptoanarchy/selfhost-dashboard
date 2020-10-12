@@ -86,7 +86,7 @@ async fn main() {
     use sloggers::Build;
     use crate::webserver::{Server, Request};
 
-    let (config, _) = Config::including_optional_config_files(&["/etc/selfhost-dashboard/interface.conf", "/etc/selfhost-dashboard/database.conf"]).unwrap_or_exit();
+    let (config, _) = Config::including_optional_config_files(&["/etc/selfhost-dashboard/interface.conf", "/etc/selfhost-dashboard/database"]).unwrap_or_exit();
 
     let logger = sloggers::terminal::TerminalLoggerBuilder::new()
         .destination(sloggers::terminal::Destination::Stderr)

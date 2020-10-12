@@ -16,10 +16,10 @@ This provides a simple dashboard for users to launch apps.
 
 ### TODO
 
-- [ ] frontend
+- [ ] proper frontend
 - [ ] icon paths
-- [ ] opening dynamic apps
-- [ ] logout
+- [x] opening dynamic apps
+- [x] logout
 - [ ] more tests
 - [ ] cleanup (fix clean architecture)
 - [ ] more doc
@@ -41,7 +41,10 @@ GET `/apps` to see app data (the icon paths are messed up right now)
 0. install postgress (`apt install postgresql`)
 1. create user `selfhostdashboard` (`sudo -u postgres psql 'CREATE ROLE selfhostdashboard LOGIN PASSWORD 'satoshinakamoto';'`)
 2. create database `selfhostdashboard` (`sudo -u postgres psql 'CREATE DATABASE selfhostdashboard OWNER selfhostdashboard;'`)
-3. `cargo run -- --conf config_example.toml`
+3. `mkdir -p /usr/share/selfhost-dashboard`
+4. `sudo cp -r static /usr/share/selfhost-dashboard`
+5. `sudo cp -r test_data/* /`
+6. `cargo run -- --conf config_example.toml`
 
 ## Contributing
 

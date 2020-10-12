@@ -91,7 +91,7 @@ pub mod config {
     fn load_and_check_app(name: &str) -> Result<AppInfo, LoadAppError> {
         let app_info_path = Path::new(DIRS.app_info).join(name).join("meta.toml");
         let app_info = load_toml::<AppInfo, _>(app_info_path).map_err(LoadAppError::Toml)?;
-        let main_icon_file = Path::new(DIRS.app_icons).join(name).join("main.png");
+        let main_icon_file = Path::new(DIRS.app_icons).join(name).join("entry_main.png");
         if !main_icon_file.exists() {
             return Err(LoadAppError::MissingIcon);
         }
@@ -167,7 +167,7 @@ pub fn get_apps<S: crate::webserver::Server>(user: &crate::login::AuthenticatedU
         .iter()
         .filter(|(_, app)| user.is_admin() || !app.admin_only)
         .map(|(k, v)| {
-            let icon = format!("{}/{}/entry_main.png", config::DIRS.app_icons, k);
+            let icon = format!("/icons/{}/entry_main.png", k);
             let url = match &v.entry_point {
                 config::EntryPoint::Static { url, } => url.to_owned(),
                 config::EntryPoint::Dynamic => format!("{}/open_app/{}", prefix, k),

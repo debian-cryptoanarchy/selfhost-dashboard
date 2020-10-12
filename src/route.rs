@@ -1,8 +1,10 @@
+use std::convert::TryFrom;
 use std::path::Path;
 use crate::webserver::{Request, HttpMethod};
 use std::future::Future;
 use std::sync::Arc;
 use slog::{error, warn, info, debug, trace};
+use std::fmt;
 
 #[cfg(not(feature = "mock_system"))]
 const STATIC_DIR: &'static str = "/usr/share/selfhost-dashboard/static";
@@ -10,14 +12,160 @@ const STATIC_DIR: &'static str = "/usr/share/selfhost-dashboard/static";
 #[cfg(feature = "mock_system")]
 const STATIC_DIR: &'static str = "./static";
 
+#[derive(Copy, Clone)]
+struct AppName<S: AsRef<str>>(S);
+
+impl<S: AsRef<str>> AppName<S> {
+    fn into_inner(self) -> S {
+        self.0
+    }
+}
+
+impl<S: AsRef<str>> std::ops::Deref for AppName<S> {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        self.0.as_ref()
+    }
+}
+
+/*
+impl<S: AsRef<str>> AsRef<str> for AppName<S> {
+    fn as_ref(&self) -> &str {
+        self.0.as_ref()
+    }
+}
+*/
+
+impl<S: AsRef<str>> fmt::Display for AppName<S> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Display::fmt(self.0.as_ref(), f)
+    }
+}
+
+impl<S: AsRef<str>> fmt::Debug for AppName<S> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Debug::fmt(self.0.as_ref(), f)
+    }
+}
+
+impl TryFrom<String> for AppName<String> {
+    type Error = InvalidAppName;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        if let Some((pos, invalid_char)) = value.chars().enumerate().find(|&(_, c)| c != '-' && (c < 'a' || c > 'z')) {
+            Err(InvalidAppName {
+                pos,
+                invalid_char,
+                name: value.into(),
+            })
+        } else {
+            Ok(AppName(value))
+        }
+    }
+}
+
+impl<S: AsRef<str>> slog::Value for AppName<S> {
+    fn serialize(&self, record: &slog::Record, key: slog::Key, serializer: &mut dyn slog::Serializer) -> slog::Result {
+        serializer.emit_str(key, self.0.as_ref())
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("invalid app name '{name}', forbidden char '{invalid_char} at {pos}")]
+struct InvalidAppName {
+    name: String,
+    pos: usize,
+    invalid_char: char,
+}
+
+pub struct SafeResourcePath<S>(S);
+
+impl<S: AsRef<str>> SafeResourcePath<S> {
+    pub fn template(&self, prefix: &'static str, suffix: &'static str) -> SafeResourcePath<String> {
+        SafeResourcePath(format!("{}/{}/{}", prefix, self.0.as_ref(), suffix))
+    }
+
+    pub fn prefix(&self, prefix: &'static str) -> SafeResourcePath<String> {
+        SafeResourcePath(format!("{}/{}", prefix, self.0.as_ref()))
+    }
+}
+
+impl SafeResourcePath<&'static str> {
+    /// Allowing only static shoud make sure it's either a literal or explicit leak.
+    fn from_literal(value: &'static str) -> Self {
+        SafeResourcePath(value)
+    }
+}
+
+impl<S: AsRef<str>> std::ops::Deref for SafeResourcePath<S> {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        self.0.as_ref()
+    }
+}
+
+impl<S: AsRef<str>> AsRef<str> for SafeResourcePath<S> {
+    fn as_ref(&self) -> &str {
+        self.0.as_ref()
+    }
+}
+
+impl<S: AsRef<str>> fmt::Display for SafeResourcePath<S> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Display::fmt(self.0.as_ref(), f)
+    }
+}
+
+impl<S: AsRef<str>> fmt::Debug for SafeResourcePath<S> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Debug::fmt(self.0.as_ref(), f)
+    }
+}
+
+impl TryFrom<String> for SafeResourcePath<String> {
+    type Error = DirectoryTraversalError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        if value.starts_with("../") || value.ends_with("/..") || value.contains("/../") {
+            Err(DirectoryTraversalError)
+        } else {
+            Ok(SafeResourcePath(value))
+        }
+    }
+}
+
+impl<'a> TryFrom<&'a str> for SafeResourcePath<&'a str> {
+    type Error = DirectoryTraversalError;
+
+    fn try_from(value: &'a str) -> Result<Self, Self::Error> {
+        if value.starts_with("../") || value.ends_with("/..") || value.contains("/../") {
+            Err(DirectoryTraversalError)
+        } else {
+            Ok(SafeResourcePath(value))
+        }
+    }
+}
+
+impl<S: AsRef<str>> From<AppName<S>> for SafeResourcePath<S> {
+    fn from(value: AppName<S>) -> Self {
+        SafeResourcePath(value.into_inner())
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("directory traversal is not allowed")]
+pub struct DirectoryTraversalError;
+
 fn bail_to_login<S: crate::webserver::Server>(message: &str, logger: slog::Logger) -> S::ResponseBuilder {
     error!(logger, "login failed"; "reason" => message);
-    serve_static::<S>("login.html", Some("text/html"), logger)
+    serve_static::<S, _>(&SafeResourcePath::from_literal("login.html"), Some("text/html"), logger)
 }
 
 fn bail_to_login_with_err<E: std::fmt::Display, S: crate::webserver::Server>(message: &str, error: &E, logger: slog::Logger) -> S::ResponseBuilder {
     error!(logger, "login failed"; "reason" => message, "error" => %error);
-    serve_static::<S>("login.html", Some("text/html"), logger)
+    serve_static::<S, _>(&SafeResourcePath::from_literal("login.html"), Some("text/html"), logger)
 }
 
 fn internal_server_error<S: crate::webserver::Server>() -> S::ResponseBuilder {
@@ -48,16 +196,14 @@ fn scan_content_type<P: AsRef<Path>>(file_path: P, logger: &slog::Logger) -> Res
         })
 }
 
-pub fn serve_static<S: crate::webserver::Server>(resource: &str, content_type: Option<&str>, logger: slog::Logger) -> S::ResponseBuilder {
+pub fn serve_static_abs<S: crate::webserver::Server, Str: AsRef<str>>(abs_path: &SafeResourcePath<Str>, content_type: Option<&str>, logger: slog::Logger) -> S::ResponseBuilder {
     use crate::webserver::ResponseBuilder;
- 
-    // We must NOT use Path::join because that function would replace the path if it's
-    // absolute.
-    let abs_path = format!("{}/{}", STATIC_DIR, resource);
-    let logger = logger.new(slog::o!("static_file_path" => abs_path.clone()));
+
+    let logger = logger.new(slog::o!("static_file_path" => abs_path.as_ref().to_owned()));
     debug!(logger, "Attempting to serve a file");
     // This is to return 404 instead of 500
-    if !Path::new(&abs_path).exists() {
+    if !Path::new(abs_path.as_ref()).exists() {
+        error!(logger, "file not found"; "path" => %abs_path);
         return not_found::<S>();
     }
 
@@ -65,7 +211,7 @@ pub fn serve_static<S: crate::webserver::Server>(resource: &str, content_type: O
     let content_type = match content_type {
         Some(content_type) => content_type,
         None => {
-            let result = scan_content_type(&abs_path, &logger);
+            let result = scan_content_type(abs_path.as_ref(), &logger);
             content_type_owned = match result {
                 Ok(content_type) => content_type,
                 Err(_) => return internal_server_error::<S>(),
@@ -76,11 +222,11 @@ pub fn serve_static<S: crate::webserver::Server>(resource: &str, content_type: O
 
     debug!(logger, "scanned content type"; "content_type" => content_type);
 
-    let file_contents = std::fs::read_to_string(abs_path);
+    let file_contents = std::fs::read_to_string(abs_path.as_ref());
     let file_contents = match file_contents {
         Ok(file_contents) => file_contents,
         Err(error) => {
-            error!(logger, "failed to serve a static file"; "resource" => resource, "error" => %error);
+            error!(logger, "failed to serve a static file"; "path" => %abs_path, "error" => %error);
             return internal_server_error::<S>();
         },
     };
@@ -91,15 +237,18 @@ pub fn serve_static<S: crate::webserver::Server>(resource: &str, content_type: O
     builder
 }
 
-fn open_dynamic<S: crate::webserver::Server>(app_name: &str, user: &crate::login::AuthenticatedUser, logger: &slog::Logger) -> Result<String, S::ResponseBuilder> {
+pub fn serve_static<S: crate::webserver::Server, Str: AsRef<str>>(resource: &SafeResourcePath<Str>, content_type: Option<&str>, logger: slog::Logger) -> S::ResponseBuilder {
     use crate::webserver::ResponseBuilder;
 
-    // Prevent various attacks
-    if app_name.chars().any(|c| c != '-' && (c < 'a' || c > 'z')) {
-        let mut builder = S::ResponseBuilder::with_status(400);
-        builder.set_body("Invalid app name, only lower case letters and dashes are allowed.".to_owned());
-        return Err(builder);
-    }
+    // We must NOT use Path::join because that function would replace the path if it's
+    // absolute.
+    let abs_path = resource.prefix(STATIC_DIR);
+
+    serve_static_abs::<S, _>(&abs_path, content_type, logger)
+}
+
+fn open_dynamic<S: crate::webserver::Server, Str: AsRef<str>>(app_name: &AppName<Str>, user: &crate::login::AuthenticatedUser, logger: &slog::Logger) -> Result<String, S::ResponseBuilder> {
+    use crate::webserver::ResponseBuilder;
 
     let entry_point_path = format!("{}/{}/open", crate::apps::config::DIRS.app_entry_points, app_name);
     let output = std::process::Command::new(&entry_point_path)
@@ -173,19 +322,34 @@ pub fn route<S: crate::webserver::Server, Db: 'static + crate::login::UserDb + S
                 // There's nothing secret here, but redirecting the user immediately is a better
                 // UX.
                 match crate::login::auth_request::<_, S>(&prefix, &mut user_db, request, logger.clone()).await {
-                    Ok(_) => serve_static::<S>("index.html", Some("text/html"), logger),
+                    Ok(_) => serve_static::<S, _>(&SafeResourcePath::from_literal("index.html"), Some("text/html"), logger),
                     Err(response) => response,
                 }
             },
             ("/static", HttpMethod::Get) => {
-                // Protect against directory traversal attacks
-                // We assume no bad symlinks because we control the contents of directories
-                if remaining.starts_with("../") || remaining.ends_with("/..") || remaining.contains("/../") {
-                    warn!(logger, "directory traversal detected");
-                    return not_found::<S>();
-                }
+                let path = match SafeResourcePath::try_from(remaining.to_owned()) {
+                    Ok(path) => path,
+                    Err(_) => {
+                        warn!(logger, "directory traversal detected");
+                        return not_found::<S>();
+                    },
+                };
 
-                serve_static::<S>(remaining, None, logger)
+                serve_static::<S, _>(&path, None, logger)
+            },
+            ("/icons", HttpMethod::Get) => {
+                let icon_path = match SafeResourcePath::try_from(remaining) {
+                    Ok(app_name) => app_name,
+                    Err(error) => {
+                        error!(logger, "invalid app name"; "error" => %error);
+                        let mut builder = S::ResponseBuilder::with_status(400);
+                        builder.set_body("Invalid app name, only lower case letters and dashes are allowed.".to_owned());
+                        return builder;
+                    }
+                };
+
+                let icon_path = icon_path.prefix(crate::apps::config::DIRS.app_icons);
+                serve_static_abs::<S, _>(&icon_path, None, logger)
             },
             ("/apps", HttpMethod::Get) => {
                 let user = match crate::login::auth_request::<_, S>(&prefix, &mut user_db, request, logger.clone()).await {
@@ -195,7 +359,7 @@ pub fn route<S: crate::webserver::Server, Db: 'static + crate::login::UserDb + S
 
                 crate::apps::get_apps::<S>(&user, &prefix, &apps)
             },
-            ("/login", HttpMethod::Get) => serve_static::<S>("login.html", Some("text/html"), logger),
+            ("/login", HttpMethod::Get) => serve_static::<S, _>(&SafeResourcePath::from_literal("login.html"), Some("text/html"), logger),
             ("/login", HttpMethod::Post) => {
                 use crate::login::LoginError;
 
@@ -254,7 +418,15 @@ pub fn route<S: crate::webserver::Server, Db: 'static + crate::login::UserDb + S
             ("/open_app", HttpMethod::Get) => {
                 use crate::apps::config::EntryPoint;
 
-                let app_name = remaining.to_owned();
+                let app_name = match AppName::try_from(remaining.to_owned()) {
+                    Ok(app_name) => app_name,
+                    Err(error) => {
+                        error!(logger, "invalid app name"; "error" => %error);
+                        let mut builder = S::ResponseBuilder::with_status(400);
+                        builder.set_body("Invalid app name, only lower case letters and dashes are allowed.".to_owned());
+                        return builder;
+                    }
+                };
 
                 let logger = logger.new(slog::o!("app" => app_name.clone()));
 
@@ -263,7 +435,7 @@ pub fn route<S: crate::webserver::Server, Db: 'static + crate::login::UserDb + S
                     Err(response) => return response,
                 };
 
-                let app = match apps.get(&app_name) {
+                let app = match apps.get(&*app_name) {
                     Some(app) => app,
                     None => {
                         return not_found::<S>();
@@ -280,7 +452,7 @@ pub fn route<S: crate::webserver::Server, Db: 'static + crate::login::UserDb + S
                 let url = match &app.entry_point {
                     EntryPoint::Static { url, } => url,
                     EntryPoint::Dynamic => {
-                        owned_url = match open_dynamic::<S>(&app_name, &user, &logger) {
+                        owned_url = match open_dynamic::<S, _>(&app_name, &user, &logger) {
                             Ok(url) => url,
                             Err(response) => return response,
                         };

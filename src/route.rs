@@ -177,6 +177,14 @@ fn internal_server_error<S: crate::webserver::Server>() -> S::ResponseBuilder {
 }
 
 fn scan_content_type<P: AsRef<Path>>(file_path: P, logger: &slog::Logger) -> Result<String, ()> {
+    match file_path.as_ref().extension().and_then(|extension| extension.to_str()) {
+        Some("html") => return Ok("text/html".to_owned()),
+        Some("css") => return Ok("text/css".to_owned()),
+        Some("js") => return Ok("text/javascript".to_owned()),
+        Some("png") => return Ok("image/png".to_owned()),
+        Some("svg") => return Ok("image/svg+xml".to_owned()),
+        _ => (),
+    }
     let output = std::process::Command::new("file")
         .arg("-i")
         .arg(file_path.as_ref())

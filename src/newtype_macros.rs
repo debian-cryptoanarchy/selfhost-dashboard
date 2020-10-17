@@ -188,9 +188,7 @@ macro_rules! str_char_whitelist_newtype {
         str_validation_newtype!($name);
 
         #[derive(Debug, Clone, thiserror::Error)]
-        // doesn't work because of https://github.com/dtolnay/thiserror/issues/105
-        // #[error(concat!("invalid ", $what, " {string}: forbidden character '{c}' at position {position}"))]
-        #[error("invalid value {string}: forbidden character '{c}' at position {position}")]
+        #[error("invalid {} {string}: forbidden character '{c}' at position {position}", $what)]
         pub struct $error_name {
             string: String,
             c: char,

@@ -3,7 +3,13 @@ configure_me::include_config!();
 #[macro_use]
 extern crate serde_derive;
 extern crate configure_me;
+pub extern crate hex;
 
+#[macro_use]
+mod newtype_macros;
+mod marker;
+mod primitives;
+mod user;
 mod login;
 mod apps;
 mod webserver;
@@ -17,7 +23,6 @@ mod mock_db;
 
 use std::fmt;
 use std::sync::Arc;
-use crate::apps::config::Apps;
 use slog::error;
 
 #[derive(serde_derive::Deserialize)]
@@ -79,12 +84,10 @@ impl configure_me::parse_arg::ParseArgFromStr for LogLevel {
     }
 }
 
-enum Never {}
-
 #[tokio::main]
 async fn main() {
     use sloggers::Build;
-    use crate::webserver::{Server, Request};
+    use crate::webserver::{self, Request};
 
     let (config, _) = Config::including_optional_config_files(&["/etc/selfhost-dashboard/interface.conf", "/etc/selfhost-dashboard/database"]).unwrap_or_exit();
 
@@ -120,7 +123,7 @@ async fn main() {
 
     let server = hyper::Server::bind(&([127, 0, 0, 1], config.bind_port).into());
 
-    let server = crate::webserver::Server::serve(server, move |request| {
+    let server = webserver::Server::serve(server, move |request| {
         slog::info!(request_logger, "received request"; "path" => request.path(), "method" => ?request.method());
         route::route::<hyper::server::Builder<hyper::server::conn::AddrIncoming>, _>(Arc::clone(&root_path), db_client.clone(), Arc::clone(&apps), request, request_logger.clone())
     });

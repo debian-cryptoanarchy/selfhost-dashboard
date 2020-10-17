@@ -42,6 +42,7 @@ pub struct PostFormError {
 }
 
 impl PostFormError {
+    #[allow(unused)]
     pub fn different_data_type(data_type: Option<&str>) -> Self {
         let message = data_type
             .map(|data_type| format!("Invalid data, expected form found {}", data_type)).unwrap_or_else(|| format!("Unknown data type, expected form"));
@@ -51,6 +52,7 @@ impl PostFormError {
         }
     }
 
+    #[allow(unused)]
     pub fn malformed_data(details: Option<&str>) -> Self {
         let message = details
             .map(|details| format!("Malformed form data: {}", details)).unwrap_or_else(|| format!("Malformed form data"));
@@ -69,6 +71,7 @@ impl fmt::Display for PostFormError {
 
 
 pub enum RedirectKind {
+    #[allow(unused)]
     Permanent,
     Temporary,
     SeeOther,

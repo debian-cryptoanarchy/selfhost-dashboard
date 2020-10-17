@@ -1,3 +1,5 @@
+use crate::user;
+
 pub mod api {
     #[derive(serde_derive::Serialize)]
     pub struct App {
@@ -17,10 +19,6 @@ pub mod config {
     use std::collections::HashMap;
     use serde::de::DeserializeOwned;
     use std::os::unix::fs::PermissionsExt;
-
-    enum Never {}
-
-    pub struct Reserved(Never);
 
     #[derive(serde_derive::Deserialize)]
     #[non_exhaustive]
@@ -61,7 +59,7 @@ pub mod config {
     };
 
     #[derive(Debug, thiserror::Error)]
-    enum LoadTomlError {
+    pub enum LoadTomlError {
         #[error("IO error")]
         Io(#[from] std::io::Error),
         #[error("failed to parse TOML")]
@@ -79,8 +77,6 @@ pub mod config {
         Toml(LoadTomlError),
         #[error("the application is missing the main icon")]
         MissingIcon,
-        #[error("the application is missing the main entry point")]
-        MissingEntryPoint,
         #[error("failed to stat entry point")]
         StatEntyrPoint(std::io::Error),
         #[error("the entry point has invalid permissions")]
@@ -160,7 +156,7 @@ pub mod config {
     }
 }
 
-pub fn get_apps<S: crate::webserver::Server>(user: &crate::login::AuthenticatedUser, prefix: &str, app_info: &config::Apps) -> S::ResponseBuilder {
+pub fn get_apps<S: crate::webserver::Server>(user: &user::Authenticated, prefix: &str, app_info: &config::Apps) -> S::ResponseBuilder {
     use crate::webserver::ResponseBuilder;
 
     let apps = app_info

@@ -1,7 +1,11 @@
+// We want to typechck the code even if it's not used
+#![cfg_attr(not(feature = "mock_systen"), allow(unused))]
+
 use std::borrow::Borrow;
 use std::pin::Pin;
 use std::future::Future;
-use crate::login::UserRecord;
+use crate::user::{self, types::AuthToken};
+use crate::primitives::Stringly;
 
 macro_rules! deser_row {
     ($row:expr, $($field:ident$(: $type:ty)?),*) => {
@@ -45,17 +49,16 @@ impl<T> Database<T> where T: 'static + Borrow<tokio_postgres::Client> + Clone + 
     }
 }
 
-impl<T> crate::login::UserDb for Database<T> where T: 'static + Borrow<tokio_postgres::Client> + Clone + Send + Sync {
+impl<T> user::Db for Database<T> where T: 'static + Borrow<tokio_postgres::Client> + Clone + Send + Sync {
     type GetUserError = tokio_postgres::Error;
     type InsertUserError = tokio_postgres::Error;
     type SetCookieError = tokio_postgres::Error;
-    type GetUserFuture = Pin<Box<dyn Future<Output=Result<Option<UserRecord>, Self::GetUserError>> + Send>>;
-    type InsertUserFuture = Pin<Box<dyn Future<Output=Result<(), crate::login::InsertUserError<Self::InsertUserError>>> + Send>>;
+    type GetUserFuture = Pin<Box<dyn Future<Output=Result<Option<user::DbRecord>, Self::GetUserError>> + Send>>;
+    type InsertUserFuture = Pin<Box<dyn Future<Output=Result<(), user::InsertError<Self::InsertUserError>>> + Send>>;
     type SetCookieFuture = Pin<Box<dyn Future<Output=Result<(), Self::SetCookieError>> + Send>>;
 
-    fn get_user(&mut self, name: &str) -> Self::GetUserFuture {
+    fn get_user<S: 'static + Stringly + Send + Sync>(&mut self, name: user::Name<S>) -> Self::GetUserFuture {
         let this = self.clone();
-        let name = name.to_owned();
 
         Box::pin(async move {
             let row = this
@@ -68,7 +71,7 @@ impl<T> crate::login::UserDb for Database<T> where T: 'static + Borrow<tokio_pos
                 .map(|row| {
                     deser_row!(row, name, hardened_password, salt, auth_token);
 
-                    Ok(UserRecord {
+                    Ok(user::DbRecord {
                         name,
                         hardened_password,
                         salt,
@@ -79,7 +82,7 @@ impl<T> crate::login::UserDb for Database<T> where T: 'static + Borrow<tokio_pos
         })
     }
 
-    fn insert_new_user(&mut self, record: UserRecord) -> Self::InsertUserFuture {
+    fn insert_new_user(&mut self, record: user::DbRecord) -> Self::InsertUserFuture {
         let this = self.clone();
 
         Box::pin(async move {
@@ -88,15 +91,13 @@ impl<T> crate::login::UserDb for Database<T> where T: 'static + Borrow<tokio_pos
                 .borrow()
                 .query("INSERT INTO users (name, hardened_password, salt, auth_token) VALUES ($1, $2, $3, $4)", &[&record.name, &record.hardened_password, &record.salt, &record.cookie])
                 .await
-                .map_err(crate::login::InsertUserError::DatabaseError)?;
+                .map_err(user::InsertError::DatabaseError)?;
             Ok(())
         })
     }
 
-    fn set_cookie(&mut self, name: &str, value: Option<&str>) -> Self::SetCookieFuture {
+    fn set_cookie<S: 'static + Stringly + Send + Sync>(&mut self, name: user::Name<S>, value: Option<AuthToken>) -> Self::SetCookieFuture {
         let this = self.clone();
-        let name = name.to_owned();
-        let value = value.map(ToOwned::to_owned);
 
         Box::pin(async move {
             this

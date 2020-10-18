@@ -7,6 +7,7 @@ use slog::{error, info, debug, trace};
 use std::fmt;
 use crate::user;
 use crate::app;
+use crate::primitives::Stringly;
 
 #[cfg(not(feature = "mock_system"))]
 const STATIC_DIR: &'static str = "/usr/share/selfhost-dashboard/static";
@@ -119,9 +120,9 @@ fn e<'a, E: fmt::Display>(new_err: Error, message: &'static str, logger: &'a slo
     }
 }
 
-pub struct SafeResourcePath<S>(S);
+str_validation_newtype!(SafeResourcePath);
 
-impl<S: AsRef<str>> SafeResourcePath<S> {
+impl<S: Stringly> SafeResourcePath<S> {
     pub fn prefix(&self, prefix: &'static str) -> SafeResourcePath<String> {
         SafeResourcePath(format!("{}/{}", prefix, self.0.as_ref()))
     }
@@ -131,32 +132,6 @@ impl SafeResourcePath<&'static str> {
     /// Allowing only static shoud make sure it's either a literal or explicit leak.
     fn from_literal(value: &'static str) -> Self {
         SafeResourcePath(value)
-    }
-}
-
-impl<S: AsRef<str>> std::ops::Deref for SafeResourcePath<S> {
-    type Target = str;
-
-    fn deref(&self) -> &Self::Target {
-        self.0.as_ref()
-    }
-}
-
-impl<S: AsRef<str>> AsRef<str> for SafeResourcePath<S> {
-    fn as_ref(&self) -> &str {
-        self.0.as_ref()
-    }
-}
-
-impl<S: AsRef<str>> fmt::Display for SafeResourcePath<S> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::Display::fmt(self.0.as_ref(), f)
-    }
-}
-
-impl<S: AsRef<str>> fmt::Debug for SafeResourcePath<S> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::Debug::fmt(self.0.as_ref(), f)
     }
 }
 
@@ -184,7 +159,7 @@ impl<'a> TryFrom<&'a str> for SafeResourcePath<&'a str> {
     }
 }
 
-impl<S: crate::primitives::Stringly> From<app::Name<S>> for SafeResourcePath<S> {
+impl<S: Stringly> From<app::Name<S>> for SafeResourcePath<S> {
     fn from(value: app::Name<S>) -> Self {
         SafeResourcePath(value.into_inner())
     }
@@ -230,13 +205,13 @@ fn scan_content_type<P: AsRef<Path>>(file_path: P, logger: &slog::Logger) -> Res
         })
 }
 
-pub fn serve_static_abs<S: crate::webserver::Server, Str: AsRef<str>>(abs_path: &SafeResourcePath<Str>, content_type: Option<&str>, logger: slog::Logger) -> S::ResponseBuilder {
+pub fn serve_static_abs<S: crate::webserver::Server, Str: Stringly>(abs_path: &SafeResourcePath<Str>, content_type: Option<&str>, logger: slog::Logger) -> S::ResponseBuilder {
     use crate::webserver::ResponseBuilder;
 
-    let logger = logger.new(slog::o!("static_file_path" => abs_path.as_ref().to_owned()));
+    let logger = logger.new(slog::o!("static_file_path" => abs_path.as_ref().into_owned()));
     debug!(logger, "Attempting to serve a file");
     // This is to return 404 instead of 500
-    if !Path::new(abs_path.as_ref()).exists() {
+    if !Path::new(&**abs_path).exists() {
         error!(logger, "file not found"; "path" => %abs_path);
         return not_found::<S>();
     }
@@ -245,7 +220,7 @@ pub fn serve_static_abs<S: crate::webserver::Server, Str: AsRef<str>>(abs_path: 
     let content_type = match content_type {
         Some(content_type) => content_type,
         None => {
-            let result = scan_content_type(abs_path.as_ref(), &logger);
+            let result = scan_content_type(&**abs_path, &logger);
             content_type_owned = match result {
                 Ok(content_type) => content_type,
                 Err(_) => return internal_server_error::<S>(),
@@ -256,7 +231,7 @@ pub fn serve_static_abs<S: crate::webserver::Server, Str: AsRef<str>>(abs_path: 
 
     debug!(logger, "scanned content type"; "content_type" => content_type);
 
-    let file_contents = std::fs::read_to_string(abs_path.as_ref());
+    let file_contents = std::fs::read_to_string(&**abs_path);
     let file_contents = match file_contents {
         Ok(file_contents) => file_contents,
         Err(error) => {
@@ -271,7 +246,7 @@ pub fn serve_static_abs<S: crate::webserver::Server, Str: AsRef<str>>(abs_path: 
     builder
 }
 
-pub fn serve_static<S: crate::webserver::Server, Str: AsRef<str>>(resource: &SafeResourcePath<Str>, content_type: Option<&str>, logger: slog::Logger) -> S::ResponseBuilder {
+pub fn serve_static<S: crate::webserver::Server, Str: Stringly>(resource: &SafeResourcePath<Str>, content_type: Option<&str>, logger: slog::Logger) -> S::ResponseBuilder {
     // We must NOT use Path::join because that function would replace the path if it's
     // absolute.
     let abs_path = resource.prefix(STATIC_DIR);
@@ -336,7 +311,7 @@ fn route_raw<S: crate::webserver::Server, Db: 'static + user::Db + Send>(prefix:
                 Ok(serve_static::<S, _>(&path, None, logger))
             },
             ("/icons", HttpMethod::Get) => {
-                let icon_path = SafeResourcePath::try_from(remaining)
+                let icon_path = SafeResourcePath::<&str>::try_from(remaining)
                     .map_err(log_and_convert(&logger))?;
 
                 let icon_path = icon_path.prefix(app::config::DIRS.app_icons);

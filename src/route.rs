@@ -425,3 +425,17 @@ fn route_raw<S: crate::webserver::Server, Db: 'static + user::Db + Send>(prefix:
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::SafeResourcePath;
+    test_str_val_ok!(resource_path_simple, SafeResourcePath, "foo");
+    test_str_val_ok!(resource_path_slash_begin, SafeResourcePath, "/foo");
+    test_str_val_ok!(resource_path_two_slashes, SafeResourcePath, "/foo/bar");
+    test_str_val_ok!(resource_path_dot, SafeResourcePath, "/foo/bar.png");
+    test_str_val_ok!(resource_path_hidden, SafeResourcePath, "/foo/.png");
+    test_str_val_err!(resource_path_traversal_begin, SafeResourcePath, "../foo");
+    test_str_val_err!(resource_path_traversal_end, SafeResourcePath, "foo/..");
+    test_str_val_err!(resource_path_traversal_middle, SafeResourcePath, "foo/../bar");
+    test_str_val_err!(resource_path_traversal_consecutive, SafeResourcePath, "foo/../../bar");
+}

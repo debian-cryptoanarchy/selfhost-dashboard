@@ -59,3 +59,19 @@ impl HardenedPassword {
 
 // cookie
 token_newtype!(AuthToken, 16, AuthTokenError);
+
+#[cfg(test)]
+mod tests {
+    use super::UserName;
+
+    test_str_val_ok!(simple_user_name, UserName, "foo");
+    test_str_val_ok!(admin_user_name, UserName, "admin");
+    test_str_val_ok!(underscore_user_name, UserName, "foo_bar");
+    test_str_val_ok!(dash_user_name, UserName, "foo-bar");
+    test_str_val_err!(space_user_name, UserName, "foo bar");
+    test_str_val_err!(space_user_name_begin, UserName, " foo");
+    test_str_val_err!(space_user_name_end, UserName, "foo ");
+    test_str_val_err!(dot_user_name, UserName, "foo.bar");
+    test_str_val_err!(at_user_name, UserName, "foo@bar");
+    test_str_val_err!(slash_user_name, UserName, "foo/bar");
+}

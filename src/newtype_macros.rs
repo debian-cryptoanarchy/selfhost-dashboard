@@ -243,3 +243,27 @@ macro_rules! str_char_whitelist_newtype {
         */
     };
 }
+
+#[cfg(test)]
+macro_rules! test_str_val_ok {
+    ($test_name:ident, $type:ident, $string:expr) => {
+        #[test]
+        fn $test_name() {
+            use core::convert::TryFrom;
+
+            <$type<&str>>::try_from($string).unwrap();
+        }
+    };
+}
+
+#[cfg(test)]
+macro_rules! test_str_val_err {
+    ($test_name:ident, $type:ident, $string:expr) => {
+        #[test]
+        fn $test_name() {
+            use core::convert::TryFrom;
+
+            assert!(<$type<&str>>::try_from($string).is_err());
+        }
+    };
+}

@@ -284,3 +284,15 @@ pub enum OpenError {
     #[error("decoding of the resulting URL failed")]
     DecodingFailed(std::string::FromUtf8Error),
 }
+
+#[cfg(test)]
+mod tests {
+    use super::Name;
+
+    test_str_val_ok!(app_name_simple, Name, "foo");
+    test_str_val_ok!(app_name_dash, Name, "foo-bar");
+    test_str_val_err!(app_name_underscore, Name, "foo_bar");
+    test_str_val_err!(app_name_dot, Name, "foo.bar");
+    test_str_val_err!(app_name_space, Name, "foo bar");
+    test_str_val_err!(app_name_slash, Name, "foo/bar");
+}

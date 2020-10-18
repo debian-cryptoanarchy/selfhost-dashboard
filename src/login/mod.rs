@@ -168,18 +168,19 @@ mod tests {
     use hmap::hmap;
     use super::*;
     use crate::mock_db::Db;
+    use std::convert::TryInto;
 
     #[test]
     fn missing_user() {
         let mut db = Db::from(hmap!("satoshi".to_owned() => user::DbRecord {
-            name: "satoshi".to_owned(),
+            name: "satoshi".to_owned().try_into().unwrap(),
             hardened_password: "000000000000000000000000000000000000000000000000000775f05a074000".parse().unwrap(),
             salt: "0000000000000000000775f05a074000".parse().unwrap(),
             cookie: None,
         }));
 
         let request = LoginRequest {
-            name: "dorian".to_owned(),
+            name: "dorian".to_owned().try_into().unwrap(),
             password: "I'm not Satoshi".to_owned(),
         };
 
@@ -195,14 +196,14 @@ mod tests {
     #[test]
     fn bad_password() {
         let mut db = Db::from(hmap!("satoshi".to_owned() => user::DbRecord {
-            name: "satoshi".to_owned(),
+            name: "satoshi".to_owned().try_into().unwrap(),
             hardened_password: "000000000000000000000000000000000000000000000000000775f05a074000".parse().unwrap(),
             salt: "0000000000000000000775f05a074000".parse().unwrap(),
             cookie: None,
         }));
 
         let request = LoginRequest {
-            name: "satoshi".to_owned(),
+            name: "satoshi".to_owned().try_into().unwrap(),
             password: "shitcoin".to_owned(),
         };
 
@@ -218,43 +219,43 @@ mod tests {
     #[test]
     fn login_success() {
         let mut db = Db::from(hmap!("satoshi".to_owned() => user::DbRecord {
-            name: "satoshi".to_owned(),
+            name: "satoshi".to_owned().try_into().unwrap(),
             hardened_password: "78e78942ef998339bf975422c27d0be88edd4601f4bee1d544b8af12bcd5b7f7".parse().unwrap(),
             salt: "0000000000000000000775f05a074000".parse().unwrap(),
             cookie: None,
         }));
 
         let request = LoginRequest {
-            name: "satoshi".to_owned(),
+            name: "satoshi".to_owned().try_into().unwrap(),
             password: "If you don't believe me or don't get it I don't have the time to explain".to_owned(),
         };
 
         let result = tokio_test::block_on(super::check_login(&mut db, request)).expect("login failed");
 
-        assert_eq!(result.name, "satoshi");
+        assert_eq!(&*result.name, "satoshi");
     }
 
     #[test]
     fn signup() {
         let mut db = Db::default();
         let request = SignupRequest {
-            name: "admin".to_owned(),
+            name: "admin".to_owned().try_into().unwrap(),
             password: "nbusr123".to_owned(),
         };
 
         tokio_test::block_on(super::signup(&mut db, request)).expect("Signup failed");
 
         let request = LoginRequest {
-            name: "admin".to_owned(),
+            name: "admin".to_owned().try_into().unwrap(),
             password: "nbusr123".to_owned(),
         };
 
         let result = tokio_test::block_on(super::check_login(&mut db, request)).expect("login failed");
 
-        assert_eq!(result.name, "admin");
+        assert_eq!(&*result.name, "admin");
 
         let request = LoginRequest {
-            name: "admin".to_owned(),
+            name: "admin".to_owned().try_into().unwrap(),
             password: "government".to_owned(),
         };
 
@@ -267,12 +268,12 @@ mod tests {
         }
 
         let request = SignupRequest {
-            name: "admin".to_owned(),
+            name: "admin".to_owned().try_into().unwrap(),
             password: "scam".to_owned(),
         };
 
         match tokio_test::block_on(super::signup(&mut db, request)) {
-            Err(super::InsertUserError::UserExists) => (),
+            Err(crate::user::db::InsertUserError::UserExists) => (),
             x => panic!("Unexpected result: {:?}", x),
         }
 

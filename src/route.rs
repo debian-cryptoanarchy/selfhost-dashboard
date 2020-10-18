@@ -83,27 +83,27 @@ impl Error {
         match self {
             Error::NotAuthorized => {
                 let mut builder = S::ResponseBuilder::with_status(401);
-                builder.set_body("Not authorized".to_owned());
+                builder.set_body("Not authorized".to_owned().into());
                 builder
             },
             Error::Forbidden(message) => {
                 let mut builder = S::ResponseBuilder::with_status(403);
-                builder.set_body(format!("Forbidden: {}", message));
+                builder.set_body(format!("Forbidden: {}", message).into());
                 builder
             },
             Error::InvalidData(message) => {
                 let mut builder = S::ResponseBuilder::with_status(400);
-                builder.set_body(format!("Invalid request: {}", message));
+                builder.set_body(format!("Invalid request: {}", message).into());
                 builder
             },
             Error::NotFound => {
                 let mut builder = S::ResponseBuilder::with_status(404);
-                builder.set_body("Not found".to_owned());
+                builder.set_body("Not found".to_owned().into());
                 builder
             },
             Error::InternalServerError => {
                 let mut builder = S::ResponseBuilder::with_status(500);
-                builder.set_body("Internal server error".to_owned());
+                builder.set_body("Internal server error".to_owned().into());
                 builder
             },
             Error::RedirectToLogin => S::ResponseBuilder::redirect(&format!("{}/login", prefix), crate::webserver::RedirectKind::SeeOther),
@@ -231,7 +231,7 @@ pub fn serve_static_abs<S: crate::webserver::Server, Str: Stringly>(abs_path: &S
 
     debug!(logger, "scanned content type"; "content_type" => content_type);
 
-    let file_contents = std::fs::read_to_string(&**abs_path);
+    let file_contents = std::fs::read(&**abs_path);
     let file_contents = match file_contents {
         Ok(file_contents) => file_contents,
         Err(error) => {

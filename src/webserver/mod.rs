@@ -79,7 +79,7 @@ pub enum RedirectKind {
 
 pub trait ResponseBuilder: Sized {
     fn with_status(status: u16) -> Self;
-    fn set_body(&mut self, body: String);
+    fn set_body(&mut self, body: Vec<u8>);
     fn set_content_type(&mut self, content_type: &str);
     fn set_cookie(&mut self, key: &str, value: &str, expires_after_seconds: Option<u64>);
     fn redirect(url: &str, kind: RedirectKind) -> Self;

@@ -24,7 +24,7 @@ impl crate::webserver::ResponseBuilder for ResponseBuilder {
         Self::new(status.try_into().expect("invalid sttus code"))
     }
 
-    fn set_body(&mut self, body: String) {
+    fn set_body(&mut self, body: Vec<u8>) {
         self.body = Some(body.into());
     }
 

@@ -216,7 +216,7 @@ pub fn get_apps<S: crate::webserver::Server>(user: &user::Authenticated, prefix:
     let serialized_response = serde_json::to_string(&resp).expect("Serialization to string should never fail");
     let mut builder = S::ResponseBuilder::with_status(200);
     builder.set_content_type("application/json");
-    builder.set_body(serialized_response);
+    builder.set_body(serialized_response.into());
 
     builder
 }

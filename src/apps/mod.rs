@@ -1,4 +1,5 @@
 use crate::user;
+use crate::primitives::Stringly;
 
 pub mod api {
     #[derive(serde_derive::Serialize)]
@@ -30,18 +31,25 @@ pub mod config {
 
     #[derive(serde_derive::Deserialize)]
     #[non_exhaustive]
+    pub struct SelfhostAppConfig {
+        pub root_path: String,
+    }
+
+    #[derive(serde_derive::Deserialize)]
+    #[non_exhaustive]
     pub struct AppInfo {
         pub user_friendly_name: String,
         pub admin_only: bool,
         pub entry_point: EntryPoint,
     }
 
-    pub type Apps = HashMap<String, AppInfo>;
+    pub type Apps = HashMap<String, super::App>;
 
     pub struct Dirs {
         pub app_info: &'static str,
         pub app_icons: &'static str,
         pub app_entry_points: &'static str,
+        pub selfhost_apps: &'static str,
     }
 
     #[cfg(not(feature = "mock_system"))]
@@ -49,6 +57,7 @@ pub mod config {
         app_info: "/etc/selfhost-dashboard/apps",
         app_icons: "/usr/share/selfhost-dashboard/apps/icons",
         app_entry_points: "/usr/lib/selfhost-dashboard/apps/entry_points",
+        selfhost_apps: "/etc/selfhost/apps",
     };
 
     #[cfg(feature = "mock_system")]
@@ -56,6 +65,7 @@ pub mod config {
         app_info: "./test_data/etc/selfhost-dashboard/apps",
         app_icons: "./test_data/usr/share/selfhost-dashboard/apps/icons",
         app_entry_points: "./test_data/usr/lib/selfhost-dashboard/apps/entry_points",
+        selfhost_apps: "./test_data/etc/selfhost/apps",
     };
 
     #[derive(Debug, thiserror::Error)]
@@ -72,9 +82,24 @@ pub mod config {
     }
 
     #[derive(Debug, thiserror::Error)]
+    pub enum LoadYamlError {
+        #[error("IO error")]
+        Io(#[from] std::io::Error),
+        #[error("failed to parse YAML")]
+        Yaml(#[from] serde_yaml::Error),
+    }
+
+    fn load_yaml<T: DeserializeOwned, P: AsRef<Path>>(file_name: P) -> Result<T, LoadYamlError> {
+        let file_contents = std::fs::read(file_name)?;
+        serde_yaml::from_slice(&file_contents).map_err(Into::into)
+    }
+
+    #[derive(Debug, thiserror::Error)]
     pub enum LoadAppError {
-        #[error("failed to parse TOML")]
-        Toml(LoadTomlError),
+        #[error("failed to load TOML")]
+        Toml(#[from] LoadTomlError),
+        #[error("failed to load YAML")]
+        Yaml(#[from] LoadYamlError),
         #[error("the application is missing the main icon")]
         MissingIcon,
         #[error("failed to stat entry point")]
@@ -84,7 +109,7 @@ pub mod config {
     }
 
     /// Loads app info and does sanity checking of associated files
-    fn load_and_check_app(name: &str) -> Result<AppInfo, LoadAppError> {
+    fn load_and_check_app(name: &str) -> Result<super::App, LoadAppError> {
         let app_info_path = Path::new(DIRS.app_info).join(name).join("meta.toml");
         let app_info = load_toml::<AppInfo, _>(app_info_path).map_err(LoadAppError::Toml)?;
         let main_icon_file = Path::new(DIRS.app_icons).join(name).join("entry_main.png");
@@ -101,7 +126,13 @@ pub mod config {
                 return Err(LoadAppError::BadEntryPointPerm(perm_bits));
             }
         }
-        Ok(app_info)
+
+        let selfhost_config = load_yaml::<SelfhostAppConfig, _>(format!("{}/{}.conf", DIRS.selfhost_apps, name))?;
+
+        Ok(super::App {
+            app_info,
+            root_path: selfhost_config.root_path,
+        })
     }
 
     pub enum BadApp {
@@ -142,15 +173,15 @@ pub mod config {
                     continue;
                 },
             };
-            let app_info = load_and_check_app(file_name);
-            let app_info = match app_info {
-                Ok(app_info) => app_info,
+            let app = load_and_check_app(file_name);
+            let app = match app {
+                Ok(app) => app,
                 Err(error) => {
                     logger.bad_app_found(&Path::new(DIRS.app_info).join(file_name), BadApp::LoadFailed(error));
                     continue;
                 },
             };
-            apps.insert(file_name.to_owned(), app_info);
+            apps.insert(file_name.to_owned(), app);
         }
         Ok(apps)
     }
@@ -161,6 +192,7 @@ pub fn get_apps<S: crate::webserver::Server>(user: &user::Authenticated, prefix:
 
     let apps = app_info
         .iter()
+        .map(|(app_name, app)| (app_name, &app.app_info))
         .filter(|(_, app)| user.is_admin() || !app.admin_only)
         .map(|(k, v)| {
             let icon = format!("/icons/{}/entry_main.png", k);
@@ -187,4 +219,68 @@ pub fn get_apps<S: crate::webserver::Server>(user: &user::Authenticated, prefix:
     builder.set_body(serialized_response);
 
     builder
+}
+
+str_char_whitelist_newtype!(AppName, AppNameError, "application name", |c| c != '-' && (c < 'a' || c > 'z'));
+
+pub struct App {
+    app_info: config::AppInfo,
+    root_path: String,
+}
+
+impl App {
+    fn open_dynamic<Str: Stringly>(app_name: &AppName<Str>, user: &user::Authenticated) -> Result<String, OpenError> {
+        let entry_point_path = format!("{}/{}/open", self::config::DIRS.app_entry_points, app_name);
+        let output = std::process::Command::new(&entry_point_path)
+            .arg(user.name())
+            .output()
+            .map_err(OpenError::EntryPointExec)?;
+
+        if !output.status.success() {
+            return Err(match (output.status.code(), String::from_utf8(output.stderr)) {
+                (Some(1), Ok(message)) => OpenError::RejectedWithMessage(message),
+                (Some(1), Err(_)) => OpenError::RejectedWithInvalidMessage,
+                (Some(exit_code), Ok(message)) => OpenError::EntryPointFailedWithMessage { message, exit_code, },
+                (Some(exit_code), Err(_)) => OpenError::EntryPointFailedWithInvalidMessage { exit_code, },
+                (None, Ok(message)) => OpenError::EntryPointKilledWithMessage { message },
+                (None, Err(_)) => OpenError::EntryPointKilledWithInvalidMessage,
+            });
+        }
+
+        String::from_utf8(output.stdout).map_err(OpenError::DecodingFailed)
+    }
+
+    pub fn get_open_url(&self, app_name: &AppName, user: &user::Authenticated) -> Result<String, OpenError> {
+        if self.app_info.admin_only && !user.is_admin() {
+            return Err(OpenError::NonAdmin.into());
+        }
+
+        Ok(match &self.app_info.entry_point {
+            config::EntryPoint::Static { url, } => format!("{}{}", self.root_path, url),
+            config::EntryPoint::Dynamic => format!("{}{}", self.root_path, App::open_dynamic(&app_name, &user)?),
+        })
+    }
+}
+
+#[non_exhaustive]
+#[derive(Debug, thiserror::Error)]
+pub enum OpenError {
+    #[error("the user is not an administrator")]
+    NonAdmin,
+    #[error("failed to execute entry point")]
+    EntryPointExec(#[source] std::io::Error),
+    #[error("user is not allowed to open the application: {0}")]
+    RejectedWithMessage(String),
+    #[error("user is not allowed to open the application (invalid message)")]
+    RejectedWithInvalidMessage,
+    #[error("entry point failed, exit code: {exit_code}, message: {message}")]
+    EntryPointFailedWithMessage { message: String, exit_code: i32, },
+    #[error("entry point failed, exit code: {exit_code}, (invalid message)")]
+    EntryPointFailedWithInvalidMessage { exit_code: i32, },
+    #[error("entry point killed, message: {message}")]
+    EntryPointKilledWithMessage { message: String, },
+    #[error("entry point killed, (invalid message)")]
+    EntryPointKilledWithInvalidMessage,
+    #[error("decoding of the resulting URL failed")]
+    DecodingFailed(std::string::FromUtf8Error),
 }

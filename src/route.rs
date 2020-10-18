@@ -6,6 +6,7 @@ use std::sync::Arc;
 use slog::{error, info, debug, trace};
 use std::fmt;
 use crate::user;
+use crate::apps;
 
 #[cfg(not(feature = "mock_system"))]
 const STATIC_DIR: &'static str = "/usr/share/selfhost-dashboard/static";
@@ -28,6 +29,20 @@ impl From<DirectoryTraversalError> for Error {
         Error::InvalidData("directory traversal is not allowed")
     }
 }
+
+impl From<apps::OpenError> for Error {
+    fn from(value: apps::OpenError) -> Self {
+        use apps::OpenError;
+
+        match value {
+            OpenError::NonAdmin => Error::Forbidden("Non-admins are not authorized to open admin-only apps"),
+            OpenError::RejectedWithMessage(_) | OpenError::RejectedWithInvalidMessage => Error::Forbidden("You are not allowed to open this application"),
+            OpenError::EntryPointExec(_) | OpenError::EntryPointFailedWithMessage { .. } |  OpenError::EntryPointFailedWithInvalidMessage { .. } |
+            OpenError::EntryPointKilledWithMessage { .. } | OpenError::EntryPointKilledWithInvalidMessage | OpenError::DecodingFailed(_) => Error::InternalServerError,
+        }
+    }
+}
+
 
 fn log_and_convert<'a, E: fmt::Display + Into<Error>>(logger: &'a slog::Logger) -> impl 'a + FnOnce(E) -> Error {
     move |error| {
@@ -104,73 +119,6 @@ fn e<'a, E: fmt::Display>(new_err: Error, message: &'static str, logger: &'a slo
     }
 }
 
-#[derive(Copy, Clone)]
-struct AppName<S: AsRef<str>>(S);
-
-impl<S: AsRef<str>> AppName<S> {
-    fn into_inner(self) -> S {
-        self.0
-    }
-}
-
-impl<S: AsRef<str>> std::ops::Deref for AppName<S> {
-    type Target = str;
-
-    fn deref(&self) -> &Self::Target {
-        self.0.as_ref()
-    }
-}
-
-/*
-impl<S: AsRef<str>> AsRef<str> for AppName<S> {
-    fn as_ref(&self) -> &str {
-        self.0.as_ref()
-    }
-}
-*/
-
-impl<S: AsRef<str>> fmt::Display for AppName<S> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::Display::fmt(self.0.as_ref(), f)
-    }
-}
-
-impl<S: AsRef<str>> fmt::Debug for AppName<S> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::Debug::fmt(self.0.as_ref(), f)
-    }
-}
-
-impl TryFrom<String> for AppName<String> {
-    type Error = InvalidAppName;
-
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        if let Some((pos, invalid_char)) = value.chars().enumerate().find(|&(_, c)| c != '-' && (c < 'a' || c > 'z')) {
-            Err(InvalidAppName {
-                pos,
-                invalid_char,
-                name: value.into(),
-            })
-        } else {
-            Ok(AppName(value))
-        }
-    }
-}
-
-impl<S: AsRef<str>> slog::Value for AppName<S> {
-    fn serialize(&self, _record: &slog::Record, key: slog::Key, serializer: &mut dyn slog::Serializer) -> slog::Result {
-        serializer.emit_str(key, self.0.as_ref())
-    }
-}
-
-#[derive(Debug, thiserror::Error)]
-#[error("invalid app name '{name}', forbidden char '{invalid_char} at {pos}")]
-struct InvalidAppName {
-    name: String,
-    pos: usize,
-    invalid_char: char,
-}
-
 pub struct SafeResourcePath<S>(S);
 
 impl<S: AsRef<str>> SafeResourcePath<S> {
@@ -236,8 +184,8 @@ impl<'a> TryFrom<&'a str> for SafeResourcePath<&'a str> {
     }
 }
 
-impl<S: AsRef<str>> From<AppName<S>> for SafeResourcePath<S> {
-    fn from(value: AppName<S>) -> Self {
+impl<S: crate::primitives::Stringly> From<apps::AppName<S>> for SafeResourcePath<S> {
+    fn from(value: apps::AppName<S>) -> Self {
         SafeResourcePath(value.into_inner())
     }
 }
@@ -329,36 +277,6 @@ pub fn serve_static<S: crate::webserver::Server, Str: AsRef<str>>(resource: &Saf
     let abs_path = resource.prefix(STATIC_DIR);
 
     serve_static_abs::<S, _>(&abs_path, content_type, logger)
-}
-
-fn open_dynamic<Str: AsRef<str>>(app_name: &AppName<Str>, user: &user::Authenticated, logger: &slog::Logger) -> Result<String, Error> {
-    let entry_point_path = format!("{}/{}/open", crate::apps::config::DIRS.app_entry_points, app_name);
-    let output = std::process::Command::new(&entry_point_path)
-        .arg(user.name())
-        .output()
-        .map_err(|error| {
-            error!(logger, "failed to execute entry point"; "error" => %error, "entry_point_path" => entry_point_path);
-            Error::InternalServerError
-        })?;
-
-    if !output.status.success() {
-        let is_internal = match (output.status.code(), String::from_utf8(output.stderr)) {
-            (Some(1), Ok(message)) => { error!(logger, "access to app rejected"; "exit_code" => 1, "message" => message); false },
-            (Some(1), Err(_)) => { error!(logger, "access to app rejected (invalid debug message)"; "exit_code" => 1); false },
-            (Some(other), Ok(message)) => { error!(logger, "access to app failed"; "exit_code" => other, "message" => message); true },
-            (Some(other), Err(_)) => { error!(logger, "access to app failed (invalid debug message)"; "exit_code" => other); true },
-            (None, Ok(message)) => { error!(logger, "entry point killed by a signal"; "message" => message); true },
-            (None, Err(_)) => { error!(logger, "entry point killed by a signaled (invalid debug message)"); true },
-        };
-
-        return Err(if is_internal {
-            Error::InternalServerError
-        } else {
-            Error::Forbidden("You are not allowed to access this application")
-        });
-    }
-
-    String::from_utf8(output.stdout).map_err(e(Error::InternalServerError, "failed to decode url suffix", &logger))
 }
 
 fn not_found<S: crate::webserver::Server>() -> S::ResponseBuilder {
@@ -497,9 +415,7 @@ fn route_raw<S: crate::webserver::Server, Db: 'static + user::Db + Send>(prefix:
                 }
             },
             ("/open_app", HttpMethod::Get) => {
-                use crate::apps::config::EntryPoint;
-
-                let app_name = AppName::try_from(remaining.to_owned()).map_err(e(Error::InvalidData("invalid application name"), "failed to parse app name", &logger))?;
+                let app_name = apps::AppName::try_from(remaining.to_owned()).map_err(e(Error::InvalidData("invalid application name"), "failed to parse app name", &logger))?;
 
                 let logger = logger.new(slog::o!("app" => app_name.clone()));
 
@@ -514,21 +430,9 @@ fn route_raw<S: crate::webserver::Server, Db: 'static + user::Db + Send>(prefix:
                     },
                 };
 
-                if app.admin_only && !user.is_admin() {
-                    error!(logger, "Non-admin attempted to open admin-only application");
-                    return Err(Error::Forbidden("Non-admins are not authorized to open admin-only apps"));
-                }
+                let url = app.get_open_url(&app_name, &user).map_err(log_and_convert(&logger))?;
 
-                let owned_url;
-                let url = match &app.entry_point {
-                    EntryPoint::Static { url, } => url,
-                    EntryPoint::Dynamic => {
-                        owned_url = open_dynamic(&app_name, &user, &logger)?;
-                        &owned_url
-                    },
-                };
-
-                Ok(S::ResponseBuilder::redirect(url, crate::webserver::RedirectKind::Temporary))
+                Ok(S::ResponseBuilder::redirect(&url, crate::webserver::RedirectKind::Temporary))
             },
             ("/logout", HttpMethod::Get) => {
                 let user = crate::login::auth_request::<_, S>(&mut user_db, request, logger.clone()).await.map_err(view_auth)?;

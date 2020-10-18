@@ -389,7 +389,7 @@ fn route_raw<S: crate::webserver::Server, Db: 'static + user::Db + Send>(prefix:
                     },
                 }
             },
-            ("/open_app", HttpMethod::Get) => {
+            ("/open-app", HttpMethod::Get) => {
                 let app_name = app::Name::try_from(remaining.to_owned()).map_err(e(Error::InvalidData("invalid application name"), "failed to parse app name", &logger))?;
 
                 let logger = logger.new(slog::o!("app" => app_name.clone()));

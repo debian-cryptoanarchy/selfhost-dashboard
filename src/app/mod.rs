@@ -198,7 +198,7 @@ pub fn get_apps<S: crate::webserver::Server>(user: &user::Authenticated, prefix:
             let icon = format!("/icons/{}/entry_main.png", k);
             let url = match &v.entry_point {
                 config::EntryPoint::Static { url, } => url.to_owned(),
-                config::EntryPoint::Dynamic => format!("{}/open_app/{}", prefix, k),
+                config::EntryPoint::Dynamic => format!("{}/open-app/{}", prefix, k),
             };
 
             api::App {

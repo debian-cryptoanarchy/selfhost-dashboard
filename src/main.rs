@@ -11,7 +11,7 @@ mod marker;
 mod primitives;
 mod user;
 mod login;
-mod apps;
+mod app;
 mod webserver;
 mod route;
 mod postgres_impl;
@@ -118,7 +118,7 @@ async fn main() {
 
     let root_path: Arc<str> = config.root_path.into();
 
-    let apps = apps::config::load_and_check_apps(logger.clone()).expect("failed to load apps");
+    let apps = app::config::load_and_check_apps(logger.clone()).expect("failed to load apps");
     let apps = Arc::new(apps);
 
     let server = hyper::Server::bind(&([127, 0, 0, 1], config.bind_port).into());

@@ -1,8 +1,8 @@
 use slog::{error, info, Logger};
 use std::path::Path;
-use crate::apps::config::BadApp;
+use crate::app::config::BadApp;
 
-impl<T> crate::apps::config::BadAppLogger for Logger<T> where T: slog::SendSyncUnwindSafeDrain<Ok=(), Err=slog::Never> {
+impl<T> crate::app::config::BadAppLogger for Logger<T> where T: slog::SendSyncUnwindSafeDrain<Ok=(), Err=slog::Never> {
     fn bad_app_found(&mut self, path: &Path, reason: BadApp) {
         match reason {
             BadApp::LoadFailed(error) => error!(self, "failed to load app"; "path" => ?path, "error" => ?error),

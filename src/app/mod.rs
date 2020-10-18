@@ -221,7 +221,7 @@ pub fn get_apps<S: crate::webserver::Server>(user: &user::Authenticated, prefix:
     builder
 }
 
-str_char_whitelist_newtype!(AppName, AppNameError, "application name", |c| c != '-' && (c < 'a' || c > 'z'));
+str_char_whitelist_newtype!(Name, NameError, "application name", |c| c != '-' && (c < 'a' || c > 'z'));
 
 pub struct App {
     app_info: config::AppInfo,
@@ -229,7 +229,7 @@ pub struct App {
 }
 
 impl App {
-    fn open_dynamic<Str: Stringly>(app_name: &AppName<Str>, user: &user::Authenticated) -> Result<String, OpenError> {
+    fn open_dynamic<Str: Stringly>(app_name: &Name<Str>, user: &user::Authenticated) -> Result<String, OpenError> {
         let entry_point_path = format!("{}/{}/open", self::config::DIRS.app_entry_points, app_name);
         let output = std::process::Command::new(&entry_point_path)
             .arg(user.name())
@@ -250,7 +250,7 @@ impl App {
         String::from_utf8(output.stdout).map_err(OpenError::DecodingFailed)
     }
 
-    pub fn get_open_url(&self, app_name: &AppName, user: &user::Authenticated) -> Result<String, OpenError> {
+    pub fn get_open_url(&self, app_name: &Name, user: &user::Authenticated) -> Result<String, OpenError> {
         if self.app_info.admin_only && !user.is_admin() {
             return Err(OpenError::NonAdmin.into());
         }

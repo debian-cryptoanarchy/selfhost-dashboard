@@ -6,7 +6,7 @@ use std::sync::Arc;
 use slog::{error, info, debug, trace};
 use std::fmt;
 use crate::user;
-use crate::apps;
+use crate::app;
 
 #[cfg(not(feature = "mock_system"))]
 const STATIC_DIR: &'static str = "/usr/share/selfhost-dashboard/static";
@@ -30,9 +30,9 @@ impl From<DirectoryTraversalError> for Error {
     }
 }
 
-impl From<apps::OpenError> for Error {
-    fn from(value: apps::OpenError) -> Self {
-        use apps::OpenError;
+impl From<app::OpenError> for Error {
+    fn from(value: app::OpenError) -> Self {
+        use app::OpenError;
 
         match value {
             OpenError::NonAdmin => Error::Forbidden("Non-admins are not authorized to open admin-only apps"),
@@ -184,8 +184,8 @@ impl<'a> TryFrom<&'a str> for SafeResourcePath<&'a str> {
     }
 }
 
-impl<S: crate::primitives::Stringly> From<apps::AppName<S>> for SafeResourcePath<S> {
-    fn from(value: apps::AppName<S>) -> Self {
+impl<S: crate::primitives::Stringly> From<app::Name<S>> for SafeResourcePath<S> {
+    fn from(value: app::Name<S>) -> Self {
         SafeResourcePath(value.into_inner())
     }
 }
@@ -288,7 +288,7 @@ fn not_found<S: crate::webserver::Server>() -> S::ResponseBuilder {
     builder
 }
 
-pub fn route<S: crate::webserver::Server, Db: 'static + user::Db + Send>(prefix: Arc<str>, user_db: Db, apps: Arc<crate::apps::config::Apps>, request: S::Request, logger: slog::Logger) -> impl Future<Output=S::ResponseBuilder> + Send where S::Request: Send + Sync, Db::SetCookieFuture: Send, Db::GetUserFuture: Send, Db::GetUserError: Send, Db::SetCookieError: Send, Db::InsertUserFuture: Send {
+pub fn route<S: crate::webserver::Server, Db: 'static + user::Db + Send>(prefix: Arc<str>, user_db: Db, apps: Arc<app::config::Apps>, request: S::Request, logger: slog::Logger) -> impl Future<Output=S::ResponseBuilder> + Send where S::Request: Send + Sync, Db::SetCookieFuture: Send, Db::GetUserFuture: Send, Db::GetUserError: Send, Db::SetCookieError: Send, Db::InsertUserFuture: Send {
     async move {
         match route_raw::<S, _>(Arc::clone(&prefix), user_db, apps, request, logger).await {
             Ok(response) => response,
@@ -297,7 +297,7 @@ pub fn route<S: crate::webserver::Server, Db: 'static + user::Db + Send>(prefix:
     }
 }
 
-fn route_raw<S: crate::webserver::Server, Db: 'static + user::Db + Send>(prefix: Arc<str>, mut user_db: Db, apps: Arc<crate::apps::config::Apps>, request: S::Request, logger: slog::Logger) -> impl Future<Output=Result<S::ResponseBuilder, Error>> + Send where S::Request: Send + Sync, Db::SetCookieFuture: Send, Db::GetUserFuture: Send, Db::GetUserError: Send, Db::SetCookieError: Send, Db::InsertUserFuture: Send {
+fn route_raw<S: crate::webserver::Server, Db: 'static + user::Db + Send>(prefix: Arc<str>, mut user_db: Db, apps: Arc<app::config::Apps>, request: S::Request, logger: slog::Logger) -> impl Future<Output=Result<S::ResponseBuilder, Error>> + Send where S::Request: Send + Sync, Db::SetCookieFuture: Send, Db::GetUserFuture: Send, Db::GetUserError: Send, Db::SetCookieError: Send, Db::InsertUserFuture: Send {
     use crate::webserver::ResponseBuilder;
     use crate::login::SignupRequest;
 
@@ -339,7 +339,7 @@ fn route_raw<S: crate::webserver::Server, Db: 'static + user::Db + Send>(prefix:
                 let icon_path = SafeResourcePath::try_from(remaining)
                     .map_err(log_and_convert(&logger))?;
 
-                let icon_path = icon_path.prefix(crate::apps::config::DIRS.app_icons);
+                let icon_path = icon_path.prefix(app::config::DIRS.app_icons);
                 Ok(serve_static_abs::<S, _>(&icon_path, None, logger))
             },
             ("/apps", HttpMethod::Get) => {
@@ -347,7 +347,7 @@ fn route_raw<S: crate::webserver::Server, Db: 'static + user::Db + Send>(prefix:
                     .await
                     .map_err(api_auth)?;
 
-                Ok(crate::apps::get_apps::<S>(&user, &prefix, &apps))
+                Ok(app::get_apps::<S>(&user, &prefix, &apps))
             },
             ("/login", HttpMethod::Get) => Ok(serve_static::<S, _>(&SafeResourcePath::from_literal("login.html"), Some("text/html"), logger)),
             ("/login", HttpMethod::Post) => {
@@ -415,7 +415,7 @@ fn route_raw<S: crate::webserver::Server, Db: 'static + user::Db + Send>(prefix:
                 }
             },
             ("/open_app", HttpMethod::Get) => {
-                let app_name = apps::AppName::try_from(remaining.to_owned()).map_err(e(Error::InvalidData("invalid application name"), "failed to parse app name", &logger))?;
+                let app_name = app::Name::try_from(remaining.to_owned()).map_err(e(Error::InvalidData("invalid application name"), "failed to parse app name", &logger))?;
 
                 let logger = logger.new(slog::o!("app" => app_name.clone()));
 

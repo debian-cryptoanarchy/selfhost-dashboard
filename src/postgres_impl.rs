@@ -43,7 +43,7 @@ impl<T> Database<T> where T: 'static + Borrow<tokio_postgres::Client> + Clone + 
             this
                 .client
                 .borrow()
-                .batch_execute("CREATE TABLE IF NOT EXISTS users (name VARCHAR PRIMARY KEY, hardened_password BYTEA, salt BYTEA, auth_token VARCHAR)")
+                .batch_execute("CREATE TABLE IF NOT EXISTS users (name VARCHAR PRIMARY KEY, hardened_password BYTEA, salt BYTEA, auth_token BYTEA)")
                 .await
         }
     }

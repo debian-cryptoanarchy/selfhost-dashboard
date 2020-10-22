@@ -106,6 +106,8 @@ pub mod config {
         StatEntyrPoint(std::io::Error),
         #[error("the entry point has invalid permissions")]
         BadEntryPointPerm(u32),
+        #[error("empty root path")]
+        EmptyRootPath,
     }
 
     /// Loads app info and does sanity checking of associated files
@@ -128,6 +130,10 @@ pub mod config {
         }
 
         let selfhost_config = load_yaml::<SelfhostAppConfig, _>(format!("{}/{}.conf", DIRS.selfhost_apps, name))?;
+
+        if selfhost_config.root_path.is_empty() {
+            return Err(LoadAppError::EmptyRootPath);
+        }
 
         Ok(super::App {
             app_info,

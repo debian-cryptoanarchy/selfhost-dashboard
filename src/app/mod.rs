@@ -198,17 +198,16 @@ pub fn get_apps<S: crate::webserver::Server>(user: &user::Authenticated, prefix:
 
     let apps = app_info
         .iter()
-        .map(|(app_name, app)| (app_name, &app.app_info))
-        .filter(|(_, app)| user.is_admin() || !app.admin_only)
+        .filter(|(_, app)| user.is_admin() || !app.app_info.admin_only)
         .map(|(k, v)| {
             let icon = format!("/icons/{}/entry_main.png", k);
-            let url = match &v.entry_point {
-                config::EntryPoint::Static { url, } => url.to_owned(),
+            let url = match &v.app_info.entry_point {
+                config::EntryPoint::Static { url, } => format!("{}{}", v.root_path, url),
                 config::EntryPoint::Dynamic => format!("{}/open-app/{}", prefix, k),
             };
 
             api::App {
-                name: v.user_friendly_name.clone(),
+                name: v.app_info.user_friendly_name.clone(),
                 icon,
                 url,
             }

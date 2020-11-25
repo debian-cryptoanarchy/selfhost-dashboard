@@ -10,7 +10,7 @@ use crate::app;
 use crate::primitives::Stringly;
 
 #[cfg(not(feature = "mock_system"))]
-const STATIC_DIR: &'static str = "/usr/share/selfhost-dashboard/static";
+const STATIC_DIR: &str = "/usr/share/selfhost-dashboard/static";
 
 #[cfg(feature = "mock_system")]
 const STATIC_DIR: &'static str = "./static";
@@ -20,7 +20,7 @@ enum Error {
     Forbidden(&'static str),
     InvalidData(&'static str),
     NotFound,
-    InternalServerError,
+    Internal,
     RedirectToLogin,
     RedirectToRegistration,
 }
@@ -39,13 +39,13 @@ impl From<app::OpenError> for Error {
             OpenError::NonAdmin => Error::Forbidden("Non-admins are not authorized to open admin-only apps"),
             OpenError::RejectedWithMessage(_) | OpenError::RejectedWithInvalidMessage => Error::Forbidden("You are not allowed to open this application"),
             OpenError::EntryPointExec(_) | OpenError::EntryPointFailedWithMessage { .. } |  OpenError::EntryPointFailedWithInvalidMessage { .. } |
-            OpenError::EntryPointKilledWithMessage { .. } | OpenError::EntryPointKilledWithInvalidMessage | OpenError::DecodingFailed(_) => Error::InternalServerError,
+            OpenError::EntryPointKilledWithMessage { .. } | OpenError::EntryPointKilledWithInvalidMessage | OpenError::DecodingFailed(_) => Error::Internal,
         }
     }
 }
 
 
-fn log_and_convert<'a, E: fmt::Display + Into<Error>>(logger: &'a slog::Logger) -> impl 'a + FnOnce(E) -> Error {
+fn log_and_convert<E: fmt::Display + Into<Error>>(logger: &slog::Logger) -> impl '_ + FnOnce(E) -> Error {
     move |error| {
         error!(logger, "request failed"; "error" => %error);
         error.into()
@@ -59,7 +59,7 @@ fn api_auth(error: crate::login::RequestError) -> Error {
         RequestError::MissingCookies => Error::NotAuthorized,
         RequestError::BadCookies => Error::NotAuthorized,
         RequestError::NoUserRegistered => Error::NotAuthorized,
-        RequestError::InternalError => Error::InternalServerError,
+        RequestError::InternalError => Error::Internal,
         RequestError::InvalidUserName => Error::InvalidData("invalid user name"),
     }
 }
@@ -71,7 +71,7 @@ fn view_auth(error: crate::login::RequestError) -> Error {
         RequestError::MissingCookies => Error::RedirectToLogin,
         RequestError::BadCookies => Error::RedirectToLogin,
         RequestError::NoUserRegistered => Error::RedirectToRegistration,
-        RequestError::InternalError => Error::InternalServerError,
+        RequestError::InternalError => Error::Internal,
         RequestError::InvalidUserName => Error::RedirectToLogin,
     }
 }
@@ -101,7 +101,7 @@ impl Error {
                 builder.set_body("Not found".to_owned().into());
                 builder
             },
-            Error::InternalServerError => {
+            Error::Internal => {
                 let mut builder = S::ResponseBuilder::with_status(500);
                 builder.set_body("Internal server error".to_owned().into());
                 builder
@@ -263,12 +263,10 @@ fn not_found<S: crate::webserver::Server>() -> S::ResponseBuilder {
     builder
 }
 
-pub fn route<S: crate::webserver::Server, Db: 'static + user::Db + Send>(prefix: Arc<str>, user_db: Db, apps: Arc<app::config::Apps>, request: S::Request, logger: slog::Logger) -> impl Future<Output=S::ResponseBuilder> + Send where S::Request: Send + Sync, Db::SetCookieFuture: Send, Db::GetUserFuture: Send, Db::GetUserError: Send, Db::SetCookieError: Send, Db::InsertUserFuture: Send {
-    async move {
-        match route_raw::<S, _>(Arc::clone(&prefix), user_db, apps, request, logger).await {
-            Ok(response) => response,
-            Err(error) => error.response::<S>(&prefix),
-        }
+pub async fn route<S: crate::webserver::Server, Db: 'static + user::Db + Send>(prefix: Arc<str>, user_db: Db, apps: Arc<app::config::Apps>, request: S::Request, logger: slog::Logger) -> S::ResponseBuilder where S::Request: Send + Sync, Db::SetCookieFuture: Send, Db::GetUserFuture: Send, Db::GetUserError: Send, Db::SetCookieError: Send, Db::InsertUserFuture: Send {
+    match route_raw::<S, _>(Arc::clone(&prefix), user_db, apps, request, logger).await {
+        Ok(response) => response,
+        Err(error) => error.response::<S>(&prefix),
     }
 }
 
@@ -372,7 +370,7 @@ fn route_raw<S: crate::webserver::Server, Db: 'static + user::Db + Send>(prefix:
                                 },
                                 Err(user::InsertError::DatabaseError(error)) => {
                                     error!(logger, "failed to insert user due to database error"; "error" => %error);
-                                    Err(Error::InternalServerError)
+                                    Err(Error::Internal)
                                 },
                             }
                         } else {
@@ -413,7 +411,7 @@ fn route_raw<S: crate::webserver::Server, Db: 'static + user::Db + Send>(prefix:
                 let user = crate::login::auth_request::<_, S>(&mut user_db, request, logger.clone()).await.map_err(view_auth)?;
                 let logger = logger.new(slog::o!("user_name" => user.name().to_owned()));
 
-                user.logout(&mut user_db).await.map_err(e(Error::InternalServerError, "failed to log out", &logger))?;
+                user.logout(&mut user_db).await.map_err(e(Error::Internal, "failed to log out", &logger))?;
 
                 info!(logger, "user logged out");
                 let mut builder = S::ResponseBuilder::redirect(&format!("{}/login", prefix), crate::webserver::RedirectKind::SeeOther);

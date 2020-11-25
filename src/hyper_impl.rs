@@ -48,7 +48,6 @@ impl ParsedRequest {
 
         let form_data = url::form_urlencoded::parse(&body_bytes)
             .into_owned()
-            .map(|item| item)
             .collect();
 
         ParsedRequest {

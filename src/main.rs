@@ -1,4 +1,10 @@
-configure_me::include_config!();
+mod config {
+    #![allow(clippy::all)]
+    #![allow(unused)]
+    include!(concat!(env!("OUT_DIR"), "/configure_me_config.rs"));
+}
+
+use config::{Config, ResultExt};
 
 #[macro_use]
 extern crate serde_derive;

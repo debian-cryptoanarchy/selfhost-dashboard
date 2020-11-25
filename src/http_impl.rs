@@ -25,7 +25,7 @@ impl crate::webserver::ResponseBuilder for ResponseBuilder {
     }
 
     fn set_body(&mut self, body: Vec<u8>) {
-        self.body = Some(body.into());
+        self.body = Some(body);
     }
 
     fn set_content_type(&mut self, content_type: &str) {

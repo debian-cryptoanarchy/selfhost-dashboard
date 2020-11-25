@@ -226,7 +226,7 @@ pub fn get_apps<S: crate::webserver::Server>(user: &user::Authenticated, prefix:
     builder
 }
 
-str_char_whitelist_newtype!(Name, NameError, "application name", |c| c != '-' && (c < 'a' || c > 'z'));
+str_char_whitelist_newtype!(Name, NameError, "application name", |c| c != '-' && !('a'..='z').contains(&c));
 
 pub struct App {
     app_info: config::AppInfo,
@@ -257,7 +257,7 @@ impl App {
 
     pub fn get_open_url(&self, app_name: &Name, user: &user::Authenticated) -> Result<String, OpenError> {
         if self.app_info.admin_only && !user.is_admin() {
-            return Err(OpenError::NonAdmin.into());
+            return Err(OpenError::NonAdmin);
         }
 
         Ok(match &self.app_info.entry_point {

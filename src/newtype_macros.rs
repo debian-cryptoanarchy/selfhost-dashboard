@@ -1,5 +1,6 @@
 macro_rules! token_newtype {
     ($name:ident, $len:expr, $error_name:ident) => {
+        #[allow(clippy::derive_hash_xor_eq)] // fine because our impl satisfies the required property
         #[derive(Debug, Copy, Clone, Eq, Hash, Serialize, Deserialize)]
         #[serde(try_from = "String")]
         pub struct $name([u8; $len]);
@@ -94,7 +95,7 @@ macro_rules! token_newtype {
 
                 let &arr = <&'a [u8]>::from_sql(ty, raw)?
                     .try_into()
-                    .map_err(|error| Box::new(error))?;
+                    .map_err(Box::new)?;
                 Ok(Self(arr))
             }
 
@@ -199,7 +200,7 @@ macro_rules! str_char_whitelist_newtype {
             type Error = $error_name;
 
             fn try_from(value: String) -> Result<Self, Self::Error> {
-                match value.chars().enumerate().find(|&(_, c)| ($validation_fn)(c)) {
+                match value.chars().enumerate().find(|&(_, c)| (($validation_fn))(c)) {
                     None => Ok($name(value)),
                     Some((position, c)) => Err($error_name {
                         string: value.into(),
@@ -214,7 +215,7 @@ macro_rules! str_char_whitelist_newtype {
             type Error = $error_name;
 
             fn try_from(value: &'a str) -> Result<Self, Self::Error> {
-                match value.chars().enumerate().find(|&(_, c)| ($validation_fn)(c)) {
+                match value.chars().enumerate().find(|&(_, c)| (($validation_fn))(c)) {
                     None => Ok($name(value)),
                     Some((position, c)) => Err($error_name {
                         string: value.into(),

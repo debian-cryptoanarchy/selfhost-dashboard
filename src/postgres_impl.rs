@@ -49,13 +49,15 @@ impl<T> Database<T> where T: 'static + Borrow<tokio_postgres::Client> + Clone + 
     }
 }
 
+type PinnedSendFutureResult<T, E> = Pin<Box<dyn Future<Output=Result<T, E>> + Send>>;
+
 impl<T> user::Db for Database<T> where T: 'static + Borrow<tokio_postgres::Client> + Clone + Send + Sync {
     type GetUserError = tokio_postgres::Error;
     type InsertUserError = tokio_postgres::Error;
     type SetCookieError = tokio_postgres::Error;
-    type GetUserFuture = Pin<Box<dyn Future<Output=Result<Option<user::DbRecord>, Self::GetUserError>> + Send>>;
-    type InsertUserFuture = Pin<Box<dyn Future<Output=Result<(), user::InsertError<Self::InsertUserError>>> + Send>>;
-    type SetCookieFuture = Pin<Box<dyn Future<Output=Result<(), Self::SetCookieError>> + Send>>;
+    type GetUserFuture = PinnedSendFutureResult<Option<user::DbRecord>, Self::GetUserError>;
+    type InsertUserFuture = PinnedSendFutureResult<(), user::InsertError<Self::InsertUserError>>;
+    type SetCookieFuture = PinnedSendFutureResult<(), Self::SetCookieError>;
 
     fn get_user<S: 'static + Stringly + Send + Sync>(&mut self, name: user::Name<S>) -> Self::GetUserFuture {
         let this = self.clone();

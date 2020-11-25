@@ -45,7 +45,7 @@ impl PostFormError {
     #[allow(unused)]
     pub fn different_data_type(data_type: Option<&str>) -> Self {
         let message = data_type
-            .map(|data_type| format!("Invalid data, expected form found {}", data_type)).unwrap_or_else(|| format!("Unknown data type, expected form"));
+            .map(|data_type| format!("Invalid data, expected form found {}", data_type)).unwrap_or_else(|| "Unknown data type, expected form".to_owned());
 
         PostFormError {
             message,
@@ -55,7 +55,7 @@ impl PostFormError {
     #[allow(unused)]
     pub fn malformed_data(details: Option<&str>) -> Self {
         let message = details
-            .map(|details| format!("Malformed form data: {}", details)).unwrap_or_else(|| format!("Malformed form data"));
+            .map(|details| format!("Malformed form data: {}", details)).unwrap_or_else(|| "Malformed form data".to_owned());
 
         PostFormError {
             message

@@ -1,5 +1,4 @@
 use std::convert::TryInto;
-use core::future::Future;
 use slog::{error, debug, trace};
 use crate::user;
 use crate::user::types::{Salt, AuthToken, HardenedPassword};
@@ -36,7 +35,7 @@ pub async fn signup<Db: user::Db>(database: &mut Db, request: SignupRequest) -> 
         name: request.name,
         hardened_password,
         salt,
-        cookie: Some(cookie.clone()),
+        cookie: Some(cookie),
     };
 
     database.insert_new_user(record).await?;
@@ -121,45 +120,43 @@ pub enum RequestError {
 }
 
 // Can't be async fn because of https://github.com/rust-lang/rust/issues/63033
-pub fn auth_request<'a, Db: user::Db, S: crate::webserver::Server>(database: &'a mut Db, request: S::Request, logger: slog::Logger) -> impl 'a + Future<Output=Result<user::Authenticated, RequestError>> where S::Request: 'a, Db::GetUserError: 'static {
-    async move {
-        use crate::webserver::Request;
+pub async fn auth_request<Db: user::Db, S: crate::webserver::Server>(database: &mut Db, request: S::Request, logger: slog::Logger) -> Result<user::Authenticated, RequestError> where Db::GetUserError: 'static {
+    use crate::webserver::Request;
 
-        let user_name = request.get_cookie("user_name").map(ToOwned::to_owned).map(TryInto::try_into).transpose().map_err(|error| { error!(logger, "invalid user name"; "error" => %error); RequestError::InvalidUserName })?;
-        let auth_token = request.get_cookie("auth_token");
+    let user_name = request.get_cookie("user_name").map(ToOwned::to_owned).map(TryInto::try_into).transpose().map_err(|error| { error!(logger, "invalid user name"; "error" => %error); RequestError::InvalidUserName })?;
+    let auth_token = request.get_cookie("auth_token");
 
-        let auth_request = match (user_name, auth_token) {
-            (Some(user_name), Some(auth_token)) => AuthRequest { user_name, auth_token: auth_token.to_owned(), },
-            (None, None) => {
-                return Err(match database.get_user(user::Name::ADMIN).await {
-                    Ok(Some(_)) => RequestError::MissingCookies,
-                    Ok(None) => RequestError::NoUserRegistered,
-                    Err(error) => {
-                        error!(logger, "failed to check presence of the admin user"; "error" => %error);
-                        RequestError::InternalError
-                    },
-                })
-            },
-            _ => return Err(RequestError::MissingCookies),
-        };
+    let auth_request = match (user_name, auth_token) {
+        (Some(user_name), Some(auth_token)) => AuthRequest { user_name, auth_token: auth_token.to_owned(), },
+        (None, None) => {
+            return Err(match database.get_user(user::Name::ADMIN).await {
+                Ok(Some(_)) => RequestError::MissingCookies,
+                Ok(None) => RequestError::NoUserRegistered,
+                Err(error) => {
+                    error!(logger, "failed to check presence of the admin user"; "error" => %error);
+                    RequestError::InternalError
+                },
+            })
+        },
+        _ => return Err(RequestError::MissingCookies),
+    };
 
-        let logger = logger.new(slog::o!("user_name" => auth_request.user_name.clone()));
+    let logger = logger.new(slog::o!("user_name" => auth_request.user_name.clone()));
 
-        debug!(logger, "authenticating user");
+    debug!(logger, "authenticating user");
 
-        let result = check_cookie(database, auth_request, logger.clone()).await;
-        match result {
-            Ok(AuthStatus::NotLoggedIn) => Err(RequestError::BadCookies),
-            Ok(AuthStatus::LoggedIn(user_name)) => Ok(user::Authenticated::user_logged_in(user_name)),
-            Err(AuthError::InvalidAuthToken(error)) => {
-                error!(logger, "Invalid authentication token"; "error" => %error);
-                Err(RequestError::BadCookies)
-            },
-            Err(error) => {
-                error!(logger, "Failed to check cookie"; "error" => %error);
-                Err(RequestError::InternalError)
-            },
-        }
+    let result = check_cookie(database, auth_request, logger.clone()).await;
+    match result {
+        Ok(AuthStatus::NotLoggedIn) => Err(RequestError::BadCookies),
+        Ok(AuthStatus::LoggedIn(user_name)) => Ok(user::Authenticated::user_logged_in(user_name)),
+        Err(AuthError::InvalidAuthToken(error)) => {
+            error!(logger, "Invalid authentication token"; "error" => %error);
+            Err(RequestError::BadCookies)
+        },
+        Err(error) => {
+            error!(logger, "Failed to check cookie"; "error" => %error);
+            Err(RequestError::InternalError)
+        },
     }
 }
 

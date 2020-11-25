@@ -1,4 +1,4 @@
-str_char_whitelist_newtype!(UserName, UserNameError, "user name", |c| c != '_' && c != '-' && (c < 'a' || c > 'z'));
+str_char_whitelist_newtype!(UserName, UserNameError, "user name", |c| c != '_' && c != '-' && !('a'..='z').contains(&c));
 
 impl UserName {
     pub const ADMIN: UserName<&'static str> = UserName("admin");

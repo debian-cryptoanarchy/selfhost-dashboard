@@ -39,7 +39,7 @@ impl From<app::OpenError> for Error {
             OpenError::NonAdmin => Error::Forbidden("Non-admins are not authorized to open admin-only apps"),
             OpenError::RejectedWithMessage(_) | OpenError::RejectedWithInvalidMessage => Error::Forbidden("You are not allowed to open this application"),
             OpenError::EntryPointExec(_) | OpenError::EntryPointFailedWithMessage { .. } |  OpenError::EntryPointFailedWithInvalidMessage { .. } |
-            OpenError::EntryPointKilledWithMessage { .. } | OpenError::EntryPointKilledWithInvalidMessage | OpenError::DecodingFailed(_) => Error::Internal,
+            OpenError::SystemUserNotFound | OpenError::TaskJoin(_) | OpenError::EntryPointKilledWithMessage { .. } | OpenError::EntryPointKilledWithInvalidMessage | OpenError::DecodingFailed(_) => Error::Internal,
         }
     }
 }
@@ -403,7 +403,7 @@ fn route_raw<S: crate::webserver::Server, Db: 'static + user::Db + Send>(prefix:
                     },
                 };
 
-                let url = app.get_open_url(&app_name, &user).map_err(log_and_convert(&logger))?;
+                let url = app.get_open_url(&app_name, &user).await.map_err(log_and_convert(&logger))?;
 
                 Ok(S::ResponseBuilder::redirect(&url, crate::webserver::RedirectKind::Temporary))
             },

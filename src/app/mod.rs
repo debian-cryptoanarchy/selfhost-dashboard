@@ -1,5 +1,6 @@
 use crate::user;
 use crate::primitives::Stringly;
+use std::future::Future;
 
 pub mod api {
     #[derive(serde_derive::Serialize)]
@@ -234,35 +235,47 @@ pub struct App {
 }
 
 impl App {
-    fn open_dynamic<Str: Stringly>(app_name: &Name<Str>, user: &user::Authenticated) -> Result<String, OpenError> {
+    fn open_dynamic<'a, Str: Stringly>(app_name: &'a Name<Str>, user: &'a user::Authenticated) -> impl Future<Output=Result<String, OpenError>> + 'a {
+        use std::os::unix::process::CommandExt;
+
         let entry_point_path = format!("{}/{}/open", self::config::DIRS.app_entry_points, app_name);
-        let output = std::process::Command::new(&entry_point_path)
-            .arg(user.name())
-            .output()
-            .map_err(OpenError::EntryPointExec)?;
+        let owned_app_name = String::from(&**app_name);
+        let owned_user_name = user.name().to_owned();
 
-        if !output.status.success() {
-            return Err(match (output.status.code(), String::from_utf8(output.stderr)) {
-                (Some(1), Ok(message)) => OpenError::RejectedWithMessage(message),
-                (Some(1), Err(_)) => OpenError::RejectedWithInvalidMessage,
-                (Some(exit_code), Ok(message)) => OpenError::EntryPointFailedWithMessage { message, exit_code, },
-                (Some(exit_code), Err(_)) => OpenError::EntryPointFailedWithInvalidMessage { exit_code, },
-                (None, Ok(message)) => OpenError::EntryPointKilledWithMessage { message },
-                (None, Err(_)) => OpenError::EntryPointKilledWithInvalidMessage,
-            });
+        async move {
+            let output = tokio::task::spawn_blocking(move || -> Result<_, _> {
+                let system_user = users::get_user_by_name(&owned_app_name).ok_or(OpenError::SystemUserNotFound)?;
+                std::process::Command::new(&entry_point_path)
+                    .arg(owned_user_name)
+                    .uid(system_user.uid())
+                    .gid(system_user.primary_group_id())
+                    .output()
+                    .map_err(OpenError::EntryPointExec)
+            }).await.map_err(OpenError::TaskJoin)??;
+
+            if !output.status.success() {
+                return Err(match (output.status.code(), String::from_utf8(output.stderr)) {
+                    (Some(1), Ok(message)) => OpenError::RejectedWithMessage(message),
+                    (Some(1), Err(_)) => OpenError::RejectedWithInvalidMessage,
+                    (Some(exit_code), Ok(message)) => OpenError::EntryPointFailedWithMessage { message, exit_code, },
+                    (Some(exit_code), Err(_)) => OpenError::EntryPointFailedWithInvalidMessage { exit_code, },
+                    (None, Ok(message)) => OpenError::EntryPointKilledWithMessage { message },
+                    (None, Err(_)) => OpenError::EntryPointKilledWithInvalidMessage,
+                });
+            }
+
+            String::from_utf8(output.stdout).map_err(OpenError::DecodingFailed)
         }
-
-        String::from_utf8(output.stdout).map_err(OpenError::DecodingFailed)
     }
 
-    pub fn get_open_url(&self, app_name: &Name, user: &user::Authenticated) -> Result<String, OpenError> {
+    pub async fn get_open_url(&self, app_name: &Name, user: &user::Authenticated) -> Result<String, OpenError> {
         if self.app_info.admin_only && !user.is_admin() {
             return Err(OpenError::NonAdmin);
         }
 
         Ok(match &self.app_info.entry_point {
             config::EntryPoint::Static { url, } => format!("{}{}", self.root_path, url),
-            config::EntryPoint::Dynamic => format!("{}{}", self.root_path, App::open_dynamic(&app_name, &user)?),
+            config::EntryPoint::Dynamic => format!("{}{}", self.root_path, App::open_dynamic(&app_name, &user).await?),
         })
     }
 }
@@ -270,6 +283,10 @@ impl App {
 #[non_exhaustive]
 #[derive(Debug, thiserror::Error)]
 pub enum OpenError {
+    #[error("the system user of the application was not found")]
+    SystemUserNotFound,
+    #[error("failed to wait for the task responsible for getting the authentication token")]
+    TaskJoin(tokio::task::JoinError),
     #[error("the user is not an administrator")]
     NonAdmin,
     #[error("failed to execute entry point")]

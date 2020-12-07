@@ -20,6 +20,7 @@ mod login;
 mod app;
 mod webserver;
 mod route;
+mod io;
 mod postgres_impl;
 mod hyper_impl;
 mod http_impl;

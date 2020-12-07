@@ -4,7 +4,6 @@ use crate::webserver::{Request, HttpMethod};
 use std::future::Future;
 use std::sync::Arc;
 use slog::{error, info, debug, trace};
-use std::fmt;
 use crate::user;
 use crate::app;
 use crate::primitives::Stringly;
@@ -25,14 +24,14 @@ enum Error {
     RedirectToRegistration,
 }
 
-impl From<DirectoryTraversalError> for Error {
-    fn from(_value: DirectoryTraversalError) -> Self {
+impl From<&'_ DirectoryTraversalError> for Error {
+    fn from(_value: &DirectoryTraversalError) -> Self {
         Error::InvalidData("directory traversal is not allowed")
     }
 }
 
-impl From<app::OpenError> for Error {
-    fn from(value: app::OpenError) -> Self {
+impl From<&'_ app::OpenError> for Error {
+    fn from(value: &app::OpenError) -> Self {
         use app::OpenError;
 
         match value {
@@ -45,10 +44,11 @@ impl From<app::OpenError> for Error {
 }
 
 
-fn log_and_convert<E: fmt::Display + Into<Error>>(logger: &slog::Logger) -> impl '_ + FnOnce(E) -> Error {
+fn log_and_convert<E>(logger: &slog::Logger) -> impl '_ + FnOnce(E) -> Error where E: 'static + std::error::Error, for<'a> &'a E: Into<Error> {
     move |error| {
-        error!(logger, "request failed"; "error" => %error);
-        error.into()
+        let ret = (&error).into();
+        error!(logger, "request failed"; "error" => #error);
+        ret
     }
 }
 
@@ -113,9 +113,9 @@ impl Error {
 }
 
 // Logs the error and replaces it with a simple version.
-fn e<'a, E: fmt::Display>(new_err: Error, message: &'static str, logger: &'a slog::Logger) -> impl 'a + FnOnce(E) -> Error {
+fn e<'a, E: 'static + std::error::Error>(new_err: Error, message: &'static str, logger: &'a slog::Logger) -> impl 'a + FnOnce(E) -> Error {
     move |error| {
-        error!(logger, "{}", message; "error" => %error);
+        error!(logger, "{}", message; "error" => #error);
         new_err
     }
 }
@@ -190,7 +190,7 @@ fn scan_content_type<P: AsRef<Path>>(file_path: P, logger: &slog::Logger) -> Res
         .arg("-i")
         .arg(file_path.as_ref())
         .output()
-        .map_err(|error| error!(logger, "failed to execute file"; "error" => %error))?;
+        .map_err(|error| error!(logger, "failed to execute file"; "error" => #error))?;
 
     if !output.status.success() {
         error!(logger, "file -i {} failed", file_path.as_ref().display(); "exit_code" => %output.status);
@@ -198,7 +198,7 @@ fn scan_content_type<P: AsRef<Path>>(file_path: P, logger: &slog::Logger) -> Res
     }
 
     String::from_utf8(output.stdout)
-        .map_err(|error| error!(logger, "failed to decode content type"; "error" => %error))
+        .map_err(|error| error!(logger, "failed to decode content type"; "error" => #error))
         .map(|mut content_type| {
             content_type.retain(|c| c != '\n');
             content_type
@@ -235,7 +235,7 @@ pub fn serve_static_abs<S: crate::webserver::Server, Str: Stringly>(abs_path: &S
     let file_contents = match file_contents {
         Ok(file_contents) => file_contents,
         Err(error) => {
-            error!(logger, "failed to serve a static file"; "path" => %abs_path, "error" => %error);
+            error!(logger, "failed to serve a static file"; "path" => %abs_path, "error" => #error);
             return internal_server_error::<S>();
         },
     };
@@ -328,11 +328,11 @@ fn route_raw<S: crate::webserver::Server, Db: 'static + user::Db + Send>(prefix:
 
                 let name = request
                     .post_form_arg("username")
-                    .map_err(|error| { error!(logger, "failed to decode form data"; "error" => %error); Error::RedirectToLogin })?
+                    .map_err(|error| { error!(logger, "failed to decode form data"; "error" => #error); Error::RedirectToLogin })?
                     .ok_or_else(|| { error!(logger, "missing user name"); Error::RedirectToLogin })?;
                 let password = request
                     .post_form_arg("password")
-                    .map_err(|error| { error!(logger, "failed to decode form data"; "error" => %error); Error::RedirectToLogin })?
+                    .map_err(|error| { error!(logger, "failed to decode form data"; "error" => #error); Error::RedirectToLogin })?
                     .ok_or_else(|| { error!(logger, "missing user password"); Error::RedirectToLogin })?;
 
                 let name = user::Name::try_from(name.to_owned()).map_err(e(Error::InvalidData("user name contains invalid character"), "invalid user name", &logger))?;
@@ -369,7 +369,7 @@ fn route_raw<S: crate::webserver::Server, Db: 'static + user::Db + Send>(prefix:
                                     Err(Error::RedirectToLogin)
                                 },
                                 Err(user::InsertError::DatabaseError(error)) => {
-                                    error!(logger, "failed to insert user due to database error"; "error" => %error);
+                                    error!(logger, "failed to insert user due to database error"; "error" => #error);
                                     Err(Error::Internal)
                                 },
                             }
@@ -378,11 +378,11 @@ fn route_raw<S: crate::webserver::Server, Db: 'static + user::Db + Send>(prefix:
                         }
                     },
                     Err(LoginError::DbGetUserError(error)) => {
-                        error!(logger, "failed to retrieve the user"; "error" => %error);
+                        error!(logger, "failed to retrieve the user"; "error" => #error);
                         Err(Error::RedirectToLogin)
                     },
                     Err(LoginError::DbSetCookieError(error)) => {
-                        error!(logger, "failed to set authentication cookie"; "error" => %error);
+                        error!(logger, "failed to set authentication cookie"; "error" => #error);
                         Err(Error::RedirectToLogin)
                     },
                 }

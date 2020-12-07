@@ -136,14 +136,14 @@ async fn main() {
 
     let server = async {
         if let Err(error) = server.await {
-            error!(logger, "web server failed"; "error" => %error);
+            error!(logger, "web server failed"; "error" => #error);
         }
     };
 
     #[cfg(not(feature = "mock_system"))]
     let db_connection_join_handle = async {
         if let Err(error) = db_connection_join_handle.await {
-            error!(logger, "database error"; "error" => %error);
+            error!(logger, "database error"; "error" => #error);
         }
     };
 

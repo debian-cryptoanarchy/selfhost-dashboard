@@ -123,7 +123,7 @@ pub enum RequestError {
 pub async fn auth_request<Db: user::Db, S: crate::webserver::Server>(database: &mut Db, request: S::Request, logger: slog::Logger) -> Result<user::Authenticated, RequestError> where Db::GetUserError: 'static {
     use crate::webserver::Request;
 
-    let user_name = request.get_cookie("user_name").map(ToOwned::to_owned).map(TryInto::try_into).transpose().map_err(|error| { error!(logger, "invalid user name"; "error" => %error); RequestError::InvalidUserName })?;
+    let user_name = request.get_cookie("user_name").map(ToOwned::to_owned).map(TryInto::try_into).transpose().map_err(|error| { error!(logger, "invalid user name"; "error" => #error); RequestError::InvalidUserName })?;
     let auth_token = request.get_cookie("auth_token");
 
     let auth_request = match (user_name, auth_token) {
@@ -133,7 +133,7 @@ pub async fn auth_request<Db: user::Db, S: crate::webserver::Server>(database: &
                 Ok(Some(_)) => RequestError::MissingCookies,
                 Ok(None) => RequestError::NoUserRegistered,
                 Err(error) => {
-                    error!(logger, "failed to check presence of the admin user"; "error" => %error);
+                    error!(logger, "failed to check presence of the admin user"; "error" => #error);
                     RequestError::InternalError
                 },
             })
@@ -150,11 +150,11 @@ pub async fn auth_request<Db: user::Db, S: crate::webserver::Server>(database: &
         Ok(AuthStatus::NotLoggedIn) => Err(RequestError::BadCookies),
         Ok(AuthStatus::LoggedIn(user_name)) => Ok(user::Authenticated::user_logged_in(user_name)),
         Err(AuthError::InvalidAuthToken(error)) => {
-            error!(logger, "Invalid authentication token"; "error" => %error);
+            error!(logger, "Invalid authentication token"; "error" => #error);
             Err(RequestError::BadCookies)
         },
         Err(error) => {
-            error!(logger, "Failed to check cookie"; "error" => %error);
+            error!(logger, "Failed to check cookie"; "error" => #error);
             Err(RequestError::InternalError)
         },
     }

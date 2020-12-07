@@ -36,7 +36,7 @@ pub trait Connection {
     fn reply(self, builder: Self::ResponseBuilder) -> Self::ReplyFuture;
 }
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub struct PostFormError {
     message: String,
 }

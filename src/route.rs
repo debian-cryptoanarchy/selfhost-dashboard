@@ -37,7 +37,7 @@ impl From<&'_ app::OpenError> for Error {
         match value {
             OpenError::NonAdmin => Error::Forbidden("Non-admins are not authorized to open admin-only apps"),
             OpenError::RejectedWithMessage(_) | OpenError::RejectedWithInvalidMessage => Error::Forbidden("You are not allowed to open this application"),
-            OpenError::EntryPointExec(_) | OpenError::EntryPointFailedWithMessage { .. } |  OpenError::EntryPointFailedWithInvalidMessage { .. } |
+            OpenError::EntryPointExec { .. } | OpenError::EntryPointFailedWithMessage { .. } |  OpenError::EntryPointFailedWithInvalidMessage { .. } |
             OpenError::SystemUserNotFound | OpenError::TaskJoin(_) | OpenError::EntryPointKilledWithMessage { .. } | OpenError::EntryPointKilledWithInvalidMessage | OpenError::DecodingFailed(_) => Error::Internal,
         }
     }

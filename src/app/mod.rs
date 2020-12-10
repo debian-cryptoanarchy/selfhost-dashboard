@@ -17,7 +17,7 @@ pub mod api {
 }
 
 pub mod config {
-    use std::path::Path;
+    use std::path::{Path, PathBuf};
     use std::collections::HashMap;
     use serde::de::DeserializeOwned;
     use std::os::unix::fs::PermissionsExt;
@@ -71,28 +71,34 @@ pub mod config {
 
     #[derive(Debug, thiserror::Error)]
     pub enum LoadTomlError {
-        #[error("IO error")]
-        Io(#[from] std::io::Error),
-        #[error("failed to parse TOML")]
-        Toml(#[from] toml::de::Error),
+        #[error("can't read {path}")]
+        Io { path: PathBuf, #[source] error: std::io::Error, },
+        #[error("failed to parse TOML loaded from {path}")]
+        Toml { path: PathBuf, #[source] error: toml::de::Error, },
     }
 
-    fn load_toml<T: DeserializeOwned, P: AsRef<Path>>(file_name: P) -> Result<T, LoadTomlError> {
-        let file_contents = std::fs::read(file_name)?;
-        toml::from_slice(&file_contents).map_err(Into::into)
+    fn load_toml<T: DeserializeOwned, P: AsRef<Path> + Into<PathBuf>>(file_name: P) -> Result<T, LoadTomlError> {
+        let file_contents = match std::fs::read(&file_name) {
+            Ok(file_contents) => file_contents,
+            Err(error) => return Err(LoadTomlError::Io { path: file_name.into(), error, }),
+        };
+        toml::from_slice(&file_contents).map_err(|error| LoadTomlError::Toml { path: file_name.into(), error, })
     }
 
     #[derive(Debug, thiserror::Error)]
     pub enum LoadYamlError {
-        #[error("IO error")]
-        Io(#[from] std::io::Error),
-        #[error("failed to parse YAML")]
-        Yaml(#[from] serde_yaml::Error),
+        #[error("can't read {path}")]
+        Io { path: PathBuf, #[source] error: std::io::Error, },
+        #[error("failed to parse YAML loaded from {path}")]
+        Yaml { path: PathBuf, #[source] error: serde_yaml::Error, },
     }
 
-    fn load_yaml<T: DeserializeOwned, P: AsRef<Path>>(file_name: P) -> Result<T, LoadYamlError> {
-        let file_contents = std::fs::read(file_name)?;
-        serde_yaml::from_slice(&file_contents).map_err(Into::into)
+    fn load_yaml<T: DeserializeOwned, P: AsRef<Path> + Into<PathBuf>>(file_name: P) -> Result<T, LoadYamlError> {
+        let file_contents = match std::fs::read(&file_name) {
+            Ok(file_contents) => file_contents,
+            Err(error) => return Err(LoadYamlError::Io { path: file_name.into(), error, }),
+        };
+        serde_yaml::from_slice(&file_contents).map_err(|error| LoadYamlError::Yaml { path: file_name.into(), error, })
     }
 
     #[derive(Debug, thiserror::Error)]
@@ -103,8 +109,8 @@ pub mod config {
         Yaml(#[from] LoadYamlError),
         #[error("the application is missing the main icon")]
         MissingIcon,
-        #[error("failed to stat entry point")]
-        StatEntyrPoint(std::io::Error),
+        #[error("failed to stat entry point {path}")]
+        StatEntyrPoint { path: PathBuf, #[source] error: std::io::Error },
         #[error("the entry point has invalid permissions")]
         BadEntryPointPerm(u32),
         #[error("empty root path")]
@@ -121,7 +127,10 @@ pub mod config {
         }
         if let EntryPoint::Dynamic = app_info.entry_point {
             let entry_point_path = Path::new(DIRS.app_entry_points).join(name).join("open");
-            let stat = entry_point_path.metadata().map_err(LoadAppError::StatEntyrPoint)?;
+            let stat = match entry_point_path.metadata() {
+                Ok(stat) => stat,
+                Err(error) => return Err(LoadAppError::StatEntyrPoint { path: entry_point_path, error, }),
+            };
             let perm = stat.permissions();
             let perm_bits = perm.mode();
             // The entry point must be readable & executable by group and NOT writable by others
@@ -162,16 +171,18 @@ pub mod config {
         }
     }
 
-    #[derive(Debug)]
+    #[derive(Debug, thiserror::Error)]
     pub enum LoadAppsError {
-        OpenDir(std::io::Error),
-        ReadDirEntry(std::io::Error),
+        #[error("can't open directory {path}")]
+        OpenDir { path: PathBuf, #[source] error: std::io::Error },
+        #[error("can't read an entry in directory {path}")]
+        ReadDirEntry { path: PathBuf, #[source] error: std::io::Error },
     }
 
     pub fn load_and_check_apps<L: BadAppLogger>(mut logger: L) -> Result<Apps, LoadAppsError> {
         let mut apps = HashMap::new();
-        for file in std::fs::read_dir(DIRS.app_info).map_err(LoadAppsError::OpenDir)? {
-            let file = file.map_err(LoadAppsError::ReadDirEntry)?;
+        for file in std::fs::read_dir(DIRS.app_info).map_err(|error| LoadAppsError::OpenDir { path: DIRS.app_info.into(), error, })? {
+            let file = file.map_err(|error| LoadAppsError::ReadDirEntry { path: DIRS.app_info.into(), error, })?;
             let file_name = file.file_name();
             let file_name = match file_name.to_str() {
                 Some(file_name) => file_name,
@@ -250,7 +261,7 @@ impl App {
                     .uid(system_user.uid())
                     .gid(system_user.primary_group_id())
                     .output()
-                    .map_err(OpenError::EntryPointExec)
+                    .map_err(move |error| OpenError::EntryPointExec { entry_point_path, error, })
             }).await.map_err(OpenError::TaskJoin)??;
 
             if !output.status.success() {
@@ -289,8 +300,8 @@ pub enum OpenError {
     TaskJoin(tokio::task::JoinError),
     #[error("the user is not an administrator")]
     NonAdmin,
-    #[error("failed to execute entry point")]
-    EntryPointExec(#[source] std::io::Error),
+    #[error("failed to execute entry point {entry_point_path}")]
+    EntryPointExec { entry_point_path: String, #[source] error: std::io::Error, },
     #[error("user is not allowed to open the application: {0}")]
     RejectedWithMessage(String),
     #[error("user is not allowed to open the application (invalid message)")]

@@ -91,6 +91,23 @@ impl configure_me::parse_arg::ParseArgFromStr for LogLevel {
     }
 }
 
+trait LogResultExt {
+    type Item;
+
+    fn die_on_error(self, logger: &slog::Logger, message: &str) -> Self::Item;
+}
+
+impl<T, E> LogResultExt for Result<T, E> where E: 'static + std::error::Error {
+    type Item = T;
+
+    fn die_on_error(self, logger: &slog::Logger, message: &str) -> Self::Item {
+        self.unwrap_or_else(|error| {
+            slog::error!(logger, "{}", message; "error" => #error);
+            std::process::exit(1)
+        })
+    }
+}
+
 #[tokio::main]
 async fn main() {
     use sloggers::Build;
@@ -109,7 +126,7 @@ async fn main() {
     #[cfg(not(feature = "mock_system"))]
     let (db_client, db_connection) = postgres_impl::ArcDatabase::connect(&config.pg_uri, tokio_postgres::tls::NoTls)
         .await
-        .expect("Failed to connect to the database");
+        .die_on_error(&logger, "Failed to connect to the database");
 
     #[cfg(not(feature = "mock_system"))]
     let db_connection_join_handle = tokio::spawn(db_connection);
@@ -121,11 +138,11 @@ async fn main() {
     db_client
         .init_tables()
         .await
-        .expect("Failed to initialize tables in the database");
+        .die_on_error(&logger, "Failed to initialize tables in the database");
 
     let root_path: Arc<str> = config.root_path.into();
 
-    let apps = app::config::load_and_check_apps(logger.clone()).expect("failed to load apps");
+    let apps = app::config::load_and_check_apps(logger.clone()).die_on_error(&logger, "failed to load apps");
     let apps = Arc::new(apps);
 
     let server = hyper::Server::bind(&([127, 0, 0, 1], config.bind_port).into());

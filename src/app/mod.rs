@@ -248,24 +248,32 @@ pub struct App {
 impl App {
     fn open_dynamic<'a, Str: Stringly>(app_name: &'a Name<Str>, user: &'a user::Authenticated) -> impl Future<Output=Result<String, OpenError>> + 'a {
         use std::os::unix::process::CommandExt;
+        use crate::io::BufReadExt;
 
         let entry_point_path = format!("{}/{}/open", self::config::DIRS.app_entry_points, app_name);
         let owned_app_name = String::from(&**app_name);
         let owned_user_name = user.name().to_owned();
 
         async move {
-            let output = tokio::task::spawn_blocking(move || -> Result<_, _> {
+            let mut child = tokio::task::spawn_blocking(move || -> Result<_, _> {
                 let system_user = users::get_user_by_name(&owned_app_name).ok_or(OpenError::SystemUserNotFound)?;
                 std::process::Command::new(&entry_point_path)
                     .arg(owned_user_name)
                     .uid(system_user.uid())
                     .gid(system_user.primary_group_id())
-                    .output()
+                    .stdout(std::process::Stdio::piped())
+                    .stderr(std::process::Stdio::piped())
+                    .spawn()
                     .map_err(move |error| OpenError::EntryPointExec { entry_point_path, error, })
             }).await.map_err(OpenError::TaskJoin)??;
 
-            if !output.status.success() {
-                return Err(match (output.status.code(), String::from_utf8(output.stderr)) {
+            let stdout_line = std::io::BufReader::new(child.stdout.take().expect("std Command API is retarded")).read_line_max(1024);
+            let stderr_line = std::io::BufReader::new(child.stdout.take().expect("std Command API is retarded")).read_line_max(1024);
+
+            let status = child.wait().map_err(|error| OpenError::EntryPointWaitFailed { app: (&**app_name).to_owned(), error, })?;
+
+            if !status.success() {
+                return Err(match (status.code(), stderr_line) {
                     (Some(1), Ok(message)) => OpenError::RejectedWithMessage(message),
                     (Some(1), Err(_)) => OpenError::RejectedWithInvalidMessage,
                     (Some(exit_code), Ok(message)) => OpenError::EntryPointFailedWithMessage { message, exit_code, },
@@ -275,7 +283,7 @@ impl App {
                 });
             }
 
-            String::from_utf8(output.stdout).map_err(OpenError::DecodingFailed)
+            stdout_line.map_err(|error| OpenError::ReadingStdoutFailed { app: (&**app_name).to_owned(), error, })
         }
     }
 
@@ -302,6 +310,8 @@ pub enum OpenError {
     NonAdmin,
     #[error("failed to execute entry point {entry_point_path}")]
     EntryPointExec { entry_point_path: String, #[source] error: std::io::Error, },
+    #[error("failed to wait for entry point process of application {app}")]
+    EntryPointWaitFailed { app: String, #[source] error: std::io::Error },
     #[error("user is not allowed to open the application: {0}")]
     RejectedWithMessage(String),
     #[error("user is not allowed to open the application (invalid message)")]
@@ -314,8 +324,8 @@ pub enum OpenError {
     EntryPointKilledWithMessage { message: String, },
     #[error("entry point killed, (invalid message)")]
     EntryPointKilledWithInvalidMessage,
-    #[error("decoding of the resulting URL failed")]
-    DecodingFailed(std::string::FromUtf8Error),
+    #[error("reading of the resulting URL of application {app} failed")]
+    ReadingStdoutFailed { app: String, #[source] error: std::io::Error, },
 }
 
 #[cfg(test)]

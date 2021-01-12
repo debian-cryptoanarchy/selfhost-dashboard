@@ -17,14 +17,15 @@ This provides a simple dashboard for users to launch apps.
 ### TODO
 
 - [ ] proper frontend
-- [ ] icon paths
+- [x] icon paths
 - [x] opening dynamic apps
 - [x] logout
+- [ ] change password
 - [ ] more tests
 - [ ] cleanup (fix clean architecture)
 - [ ] more doc
-- [ ] integrate into the repository
-- [ ] migrate existing apps to use the dashboard
+- [ ] integrate into the repository (already in `experimental`)
+- [x] migrate existing apps to use the dashboard
 
 ## Testing
 
@@ -33,10 +34,12 @@ This provides a simple dashboard for users to launch apps.
 `cargo run --features mock_system -- --conf config_example.toml`
 
 Open `http://localhost:9009/dashboard`, enter `admin` as username, pick any password and click submit.
-Dashboard should open after registration finishes.
-GET `/apps` to see app data (the icon paths are messed up right now)
+Dashboard with apps should open after registration finishes.
+See response to GET `/apps` to see app data
 
 ### Real DB and paths
+
+Better use version packaged in `experimental`. Contact me privately for more info.
 
 0. install postgress (`apt install postgresql`)
 1. create user `selfhostdashboard` (`sudo -u postgres psql 'CREATE ROLE selfhostdashboard LOGIN PASSWORD 'satoshinakamoto';'`)

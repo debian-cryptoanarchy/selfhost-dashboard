@@ -14,6 +14,8 @@ const STATIC_DIR: &str = "/usr/share/selfhost-dashboard/static";
 #[cfg(feature = "mock_system")]
 const STATIC_DIR: &'static str = "./static";
 
+const COOKIE_LIFETIME_SECONDS: u64 = 3600 * 24 * 365; // one year
+
 enum Error {
     NotAuthorized,
     Forbidden(&'static str),
@@ -289,7 +291,10 @@ fn route_raw<S: crate::webserver::Server, Db: 'static + user::Db + Send>(prefix:
             ("", "")
         } else {
             match path[1..].find('/') {
-                Some(idx) => (&path[..(idx + 1)], &path[(idx + 2)..]),
+                Some(idx) => {
+                    let idx = idx + 1; // find started at offset 1
+                    (&path[..idx], &path[(idx + 1)..])
+                },
                 None => (path, ""),
             }
         };
@@ -347,8 +352,8 @@ fn route_raw<S: crate::webserver::Server, Db: 'static + user::Db + Send>(prefix:
                 match result {
                     Ok(success) => {
                         let mut builder = S::ResponseBuilder::redirect(&prefix, crate::webserver::RedirectKind::SeeOther);
-                        builder.set_cookie("user_name", &success.name, Some(31536000));
-                        builder.set_cookie("auth_token", &success.cookie.to_string(), Some(31536000));
+                        builder.set_cookie("user_name", &success.name, Some(COOKIE_LIFETIME_SECONDS));
+                        builder.set_cookie("auth_token", &success.cookie.to_string(), Some(COOKIE_LIFETIME_SECONDS));
                         Ok(builder)
                     },
                     Err(LoginError::BadUserPassword) => {
@@ -361,8 +366,8 @@ fn route_raw<S: crate::webserver::Server, Db: 'static + user::Db + Send>(prefix:
                             match crate::login::signup(&mut user_db, signup_request).await {
                                 Ok(cookie) => {
                                     let mut builder = S::ResponseBuilder::redirect(&prefix, crate::webserver::RedirectKind::SeeOther);
-                                    builder.set_cookie("user_name", &name, Some(31536000));
-                                    builder.set_cookie("auth_token", &cookie.to_string(), Some(31536000));
+                                    builder.set_cookie("user_name", &name, Some(COOKIE_LIFETIME_SECONDS));
+                                    builder.set_cookie("auth_token", &cookie.to_string(), Some(COOKIE_LIFETIME_SECONDS));
                                     Ok(builder)
                                 },
                                 Err(user::InsertError::UserExists) => {

@@ -149,7 +149,7 @@ macro_rules! str_validation_newtype {
         impl<S> core::ops::Deref for $name<S> where S: $crate::primitives::Stringly {
             type Target = str;
 
-            fn deref<'a>(&'a self) -> &'a Self::Target {
+            fn deref(&self) -> &Self::Target {
                 self.0.borrow()
             }
         }
@@ -171,10 +171,7 @@ macro_rules! str_validation_newtype {
 
         impl<'a, S, E> tokio_postgres::types::FromSql<'a> for $name<S> where S: $crate::primitives::Stringly + core::convert::TryInto<$name<S>, Error=E> + tokio_postgres::types::FromSql<'a>, E: 'static + std::error::Error + Sync + Send {
             fn from_sql(ty: &tokio_postgres::types::Type, raw: &'a [u8]) -> Result<Self, Box<dyn std::error::Error + 'static + Sync + Send>> {
-                #[allow(unused)]
-                use std::convert::TryInto;
-
-                Ok(S::from_sql(ty, raw)?.try_into()?)
+                Ok(std::convert::TryInto::try_into(S::from_sql(ty, raw)?)?)
             }
 
             fn accepts(ty: &tokio_postgres::types::Type) -> bool {

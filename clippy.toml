@@ -1,1 +1,2 @@
-msrv = "1.41"
+# Not supported by older clippy
+#msrv = "1.41"

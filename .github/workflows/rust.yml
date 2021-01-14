@@ -27,6 +27,8 @@ jobs:
       run: cargo build --verbose
     - name: Run unit tests
       run: cargo test --verbose
+    - name: Build mocked version
+      run: cargo build --features=mock_system
     - name: Run basic end to end API tests
       run: ./e2e_tests/api/basic.py
     - name: Install Selenium

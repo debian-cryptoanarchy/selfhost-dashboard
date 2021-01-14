@@ -1,0 +1,4 @@
+[toolchain]
+channel = "1.41.1"
+components = ["clippy"]
+targets = ["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"]

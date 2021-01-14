@@ -19,7 +19,9 @@ jobs:
       run: rustup self update
     - uses: actions/checkout@v2
     - name: Setup rust-toolchain
-      uses: actions-rs/toolchain@v1.0.6
+      # This looks retarded but it's correct
+      # see https://github.com/rust-lang/rustup/issues/2070#issuecomment-545096849
+      run: rustup show
     - name: Build
       run: cargo build --verbose
     - name: Run tests

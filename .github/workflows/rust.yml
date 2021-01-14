@@ -8,6 +8,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  HEADLESS_TEST: 1
 
 jobs:
   build:
@@ -28,5 +29,9 @@ jobs:
       run: cargo test --verbose
     - name: Run basic end to end API tests
       run: ./e2e_tests/api/basic.py
+    - name: Install Selenium
+      run: sudo apt install python3-selenium
+    - name: Run browser test
+      run: ./e2e_tests/browser/basic.py
     - name: Clippy
       run: cargo clippy -- -D clippy::all

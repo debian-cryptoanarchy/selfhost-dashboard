@@ -24,7 +24,9 @@ jobs:
       run: rustup show
     - name: Build
       run: cargo build --verbose
-    - name: Run tests
+    - name: Run unit tests
       run: cargo test --verbose
+    - name: Run basic end to end API tests
+      run: ./e2e_tests/api/basic.py
     - name: Clippy
       run: cargo clippy -- -D clippy::all

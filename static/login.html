@@ -1,13 +1,71 @@
-<html>
-	<header>
-		<title>Selfhost dashboard - login</title>
-	</header>
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+		<meta name="description" content="">
+		<meta name="author" content="">
+		<title>Selfhosted dashboard - Alpha release. Work in progress...</title>
+		<!-- Bootstrap & core CSS -->
+		<link href="/dashboard/static/login.css" rel="stylesheet">
+		<link href="/dashboard/static/bootstrap.min.css" rel="stylesheet" >
+	</head>
 	<body>
-		<h1>Log in to the dashboard</h1>
-		<form action="" method="post">
-			<div>user name <input type="text" name="username"></div>
-			<div>password <input type="password" name="password"></div>
-			<div><input type="submit" value="Log in"></div>
-		</form>
+		<div class="container">
+			<div class="row fort-login">
+				<div class="fort-left col-md-4">
+					<div class="fort-social row">
+						<span class="align-middle">Stalk us at</span>
+						<span class="fort-iconGit"></span>
+						<span class="fort-iconTwit"></span>
+					</div>
+				</div>
+				<div class="fort-right col-md-8 align-self-center">
+					<div class="row">
+						<div class="col-md-3">
+						</div>
+						<div class="col-md-6">
+							<h3 class="fort-loginHeader">Login into your fortress</h3>
+							<div class="toast d-flex align-items-right text-white border-0" role="alert" aria-live="assertive" aria-atomic="true">
+								<div class="toast-body">
+									Alpha version. Work in progess...
+								</div>
+							</div>
+							<form action="" method="post" class="fort-loginForm">
+								<span>User</span>
+								<div class="input-group fort-loginUser">
+									<div class="input-group-prepend">
+										<span class="input-group-text" id="fort-name"><img src="/dashboard/static/img/icon_user.svg" alt="" width="15" class="d-inline-block align-top"></span>
+									</div>
+									<input type="text" class="form-control" id="username" name="username" placeholder="Enter your name" aria-label="Username" aria-describedby="fort-name" > 
+								</div>
+								<span>Password</span>
+								<div class="input-group fort-loginPass">
+									<div class="input-group-prepend">
+										<span class="input-group-text" id="fort-password"><img src="/dashboard/static/img/icon_lock.svg" alt="" width="15" class="d-inline-block align-top"></span>
+									</div>
+									<input type="password" class="form-control" id="inputPassword" name="password" placeholder="Enter your password" aria-label="Password" aria-describedby="fort-password" >
+								</div>
+								<button class="btn btn-primary fort-loginBtn" onclick="toggleBtn()" type="submit">Login</button>
+								<button class="btn btn-primary fort-loginBtn" id="fort-loginBtnAlt" type="button" disabled>
+									<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+									Login...
+								</button>
+							</form>
+						</div>
+						<div class="col-md-3">
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+		<script type="application/javascript">
+			toggleBtn = function(){
+				var btn = document.getElementsByClassName("fort-loginBtn")[0];
+				btn.style.display = "none";
+				var btn = document.getElementById("fort-loginBtnAlt");
+				btn.style.display = "block";
+			}
+		</script>
 	</body>
 </html>

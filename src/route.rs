@@ -16,13 +16,29 @@ const STATIC_DIR: &'static str = "./static";
 
 const COOKIE_LIFETIME_SECONDS: u64 = 3600 * 24 * 365; // one year
 
+enum LoginReason {
+    LoggedOut,
+    BadCredentials,
+    BadInput,
+}
+
+impl LoginReason {
+    fn suffix(&self) -> &'static str {
+        match self {
+            LoginReason::LoggedOut => "",
+            LoginReason::BadCredentials => "#failure=credentials",
+            LoginReason::BadInput => "#failure=input",
+        }
+    }
+}
+
 enum Error {
     NotAuthorized,
     Forbidden(&'static str),
     InvalidData(&'static str),
     NotFound,
     Internal,
-    RedirectToLogin,
+    RedirectToLogin(LoginReason),
     RedirectToRegistration,
 }
 
@@ -71,11 +87,11 @@ fn view_auth(error: crate::login::RequestError) -> Error {
     use crate::login::RequestError;
 
     match error {
-        RequestError::MissingCookies => Error::RedirectToLogin,
-        RequestError::BadCookies => Error::RedirectToLogin,
+        RequestError::MissingCookies => Error::RedirectToLogin(LoginReason::LoggedOut),
+        RequestError::BadCookies => Error::RedirectToLogin(LoginReason::LoggedOut),
         RequestError::NoUserRegistered => Error::RedirectToRegistration,
         RequestError::InternalError => Error::Internal,
-        RequestError::InvalidUserName => Error::RedirectToLogin,
+        RequestError::InvalidUserName => Error::RedirectToLogin(LoginReason::BadInput),
     }
 }
 
@@ -109,7 +125,7 @@ impl Error {
                 builder.set_body("Internal server error".to_owned().into());
                 builder
             },
-            Error::RedirectToLogin => S::ResponseBuilder::redirect(&format!("{}/login", prefix), crate::webserver::RedirectKind::SeeOther),
+            Error::RedirectToLogin(reason) => S::ResponseBuilder::redirect(&format!("{}/login{}", prefix, reason.suffix()), crate::webserver::RedirectKind::SeeOther),
             Error::RedirectToRegistration => S::ResponseBuilder::redirect(&format!("{}/login#uninitialized=true", prefix), crate::webserver::RedirectKind::SeeOther),
         }
     }
@@ -334,12 +350,12 @@ fn route_raw<S: crate::webserver::Server, Db: 'static + user::Db + Send>(prefix:
 
                 let name = request
                     .post_form_arg("username")
-                    .map_err(|error| { error!(logger, "failed to decode form data"; "error" => #error); Error::RedirectToLogin })?
-                    .ok_or_else(|| { error!(logger, "missing user name"); Error::RedirectToLogin })?;
+                    .map_err(|error| { error!(logger, "failed to decode form data"; "error" => #error); Error::RedirectToLogin(LoginReason::BadInput) })?
+                    .ok_or_else(|| { error!(logger, "missing user name"); Error::RedirectToLogin(LoginReason::BadInput) })?;
                 let password = request
                     .post_form_arg("password")
-                    .map_err(|error| { error!(logger, "failed to decode form data"; "error" => #error); Error::RedirectToLogin })?
-                    .ok_or_else(|| { error!(logger, "missing user password"); Error::RedirectToLogin })?;
+                    .map_err(|error| { error!(logger, "failed to decode form data"; "error" => #error); Error::RedirectToLogin(LoginReason::BadInput) })?
+                    .ok_or_else(|| { error!(logger, "missing user password"); Error::RedirectToLogin(LoginReason::BadInput) })?;
 
                 let name = user::Name::try_from(name.to_owned()).map_err(e(Error::InvalidData("user name contains invalid character"), "invalid user name", &logger))?;
 
@@ -372,7 +388,7 @@ fn route_raw<S: crate::webserver::Server, Db: 'static + user::Db + Send>(prefix:
                                 },
                                 Err(user::InsertError::UserExists) => {
                                     error!(logger, "Invalid user name or password");
-                                    Err(Error::RedirectToLogin)
+                                    Err(Error::RedirectToLogin(LoginReason::BadCredentials))
                                 },
                                 Err(user::InsertError::DatabaseError(error)) => {
                                     error!(logger, "failed to insert user due to database error"; "error" => #error);
@@ -380,16 +396,16 @@ fn route_raw<S: crate::webserver::Server, Db: 'static + user::Db + Send>(prefix:
                                 },
                             }
                         } else {
-                            Err(Error::RedirectToLogin)
+                            Err(Error::RedirectToLogin(LoginReason::BadCredentials))
                         }
                     },
                     Err(LoginError::DbGetUserError(error)) => {
                         error!(logger, "failed to retrieve the user"; "error" => #error);
-                        Err(Error::RedirectToLogin)
+                        Err(Error::Internal)
                     },
                     Err(LoginError::DbSetCookieError(error)) => {
                         error!(logger, "failed to set authentication cookie"; "error" => #error);
-                        Err(Error::RedirectToLogin)
+                        Err(Error::Internal)
                     },
                 }
             },

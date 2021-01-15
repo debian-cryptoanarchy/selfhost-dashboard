@@ -1,36 +1,58 @@
-<html>
-	<header>
-		<title>Selfhost dashboard</title>
-	</header>
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+		<meta name="description" content="">
+		<meta name="author" content="">
+		<title>Selfhosted dashboard - Alpha release. Work in progress...</title>
+		<!-- Bootstrap & core CSS -->
+		<link href="/dashboard/static/dashboard.css" rel="stylesheet">
+		<link href="/dashboard/static/bootstrap.min.css" rel="stylesheet" >
 	<body>
-		<p>Hello world!</p>
-		<p>This site will be loaded after logging in.</p>
-		<ul id="apps">
-		</ul>
-		<script type="application/javascript">
-			var path = window.location.pathname;
-			var idx = path.indexOf('/', 1);
-			if(idx < 0) {
-				root_path = path;
-			} else {
-				root_path = path.substr(0, idx);
-			}
-			console.log(root_path);
+		<div class="container fort-dashboard">
+			<div class="row fort-dashboardHead">
+				<div class="col-md-2">
+					<nav class="navbar navbar-expand-md">
+						<nav class="navbar navbar-light fort-logo">
+							<a class="navbar-brand" href="">
+								<img src="/dashboard/static/img/logo.svg" alt="" width="95" height="20">
+							</a>					
+						</nav>
+					</nav>
+				</div>
+				<div class="col-md-10">
+					<div class="fort-menu d-flex">
+						<span>admin</span>
+						<span class="fort-iconName"></span>
+						<span class="visually-hidden fort-iconMenu dropdown-toggle dropdown-toggle-split" id="dropdownMenuReference" data-bs-toggle="dropdown" aria-expanded="false" data-bs-reference="parent"></span>
+						<ul class="dropdown-menu" aria-labelledby="dropdownMenuReference">
+							<li><a class="disabled fort-iconSettings dropdown-item" href="#">Settings</a></li>
+							<li><a class="disabled fort-iconManage dropdown-item" href="#">Manage</a></li>
+							<li><hr class="dropdown-divider"></li>
+							<li><a class="fort-iconLogout dropdown-item" href="/dashboard/logout">Logout</a></li>
+						</ul>
+					</div>
+				</div>
+			</div>
+			<div class="row fort-dashboardContent">
+				<div class="col-md-2"> 
 
-			var xhr = new XMLHttpRequest();
-			xhr.onreadystatechange = function() {
-				if (xhr.readyState === 4) {
-					var response = JSON.parse(xhr.responseText);
-					var apps_html = ""
-					for (app of response.apps) {
-						console.log(app);
-						apps_html += "<li><a href=\"" + app.url + "\">" + app.name + "</li>"
-					}
-					document.getElementById("apps").innerHTML = apps_html;
-				}
-			}
-			xhr.open('GET', root_path + '/apps');
-			xhr.send()
-		</script>
+				</div>
+				<div class="col-md-8">
+					<div id="apps" class="row">
+					</div>
+				</div>
+				<div class="col-md-2"> 
+
+				</div>
+			</div>
+			<div class="row fort-dashboardNotice">
+				<div class="col-md-9"></div>
+				<div class="col-md-3"></div>
+			</div>
+		</div>
+		<script src="/dashboard/static/bootstrap.bundle.min.js" integrity="sha384-ygbV9kiqUc6oa4msXn9868pTtWMgiQaeYH7/t7LECLbyPA2x65Kgf80OJFdroafW" crossorigin="anonymous"></script>
+		<script src="/dashboard/static/dashboard.js"></script>
 	</body>
 </html>

@@ -1,0 +1,204 @@
+/*!
+ * Bootstrap v4.0.0 (https://getbootstrap.com)
+ * Copyright 2011-2018 The Bootstrap Authors
+ * Copyright 2011-2018 Twitter, Inc.
+ * Licensed under MIT (https://github.com/twbs/bootstrap/blob/master/LICENSE)
+ */
+
+html,
+body {
+  height: 100%;
+  padding: 0 !important;
+  font-size: 0.9rem;
+}
+
+body {
+  display: -ms-flexbox;
+  display: -webkit-box;
+  display: flex;
+  -ms-flex-align: center;
+  -ms-flex-pack: center;
+  -webkit-box-align: center;
+  align-items: center;
+  -webkit-box-pack: center;
+  justify-content: center;
+  background-color: #f2f2f2 !important;
+}
+
+.navbar {
+  padding-left: 10px !important;
+}
+
+.nav-link {
+  background-color: #f5f5f5;
+}
+
+.container {
+  margin: auto;
+  background-color: #fff;
+  box-shadow: rgba(0, 0, 0, 0.25) 0px 25px 50px -12px;
+}
+
+.container-fluid {
+  padding-left: 0 !important;
+}
+
+.dropdown-menu {
+  border: 0 !important;
+  box-shadow: rgba(0, 0, 0, 0.25) 0px 0px 10px;
+  border-radius: 10% !important;
+  top: 10px !important;
+}
+.dropdown-toggle::after {
+  content: none !important;
+}
+
+.dropdown-item.active, .dropdown-item:active {
+  background-color: white !important;
+  color: #6c757d !important;
+}
+
+/*!
+ * Fortress 0.1.0-alpha
+ * Licensed under MIT
+ */
+
+.fort-dashboard {
+  min-height: 525px;
+}
+
+.fort-dashboardHead {
+  min-height: 20px;
+}
+
+.fort-dashboardContent {
+  margin-top: 20px;
+}
+
+.fort-dashboardNotice {
+  margin-top: 20px;
+}
+
+.fort-menu {
+  float: right;
+  margin-top: 20px;
+  margin-right: 15px;
+}
+
+.fort-menu > span {
+  padding-top: 3px;
+}
+
+.fort-menu {
+  float: right;
+  margin-top: 20px;
+}
+
+.fort-menu > .show {
+  background-color: #9daedb;
+}
+
+.dropdown-menu {
+  background-color: white !important;
+}
+
+.fort-tile {
+  border: 0 !important;
+  width: 100px;
+}
+
+.fort-tileImg {
+  width: 100px;
+  height: 100px;
+  border-radius: 2rem !important;
+  border: 1px solid gray !important;
+}
+
+.fort-tileName {
+  display: flex !important;
+  float: left !important;
+  clear: both;
+  margin-top: 10px;
+  color: black !important;
+}
+
+.fort-tileName > a {
+  color: #f5f5f5 !important;
+}
+
+.fort-iconSettings {
+  color: #484e56;
+  background-image: url('/dashboard/static/img/icon_settings.svg');
+  background-size: 20px 20px;
+  margin: auto;
+  background-repeat: no-repeat;
+  padding-left: 30px !important;
+  margin-left: 20px;
+  display: block;
+  cursor: pointer;
+  width: 100px !important;
+  padding-right: 0px !important;
+  background-position: left;
+}
+
+.fort-iconManage {
+  color: #484e56;
+  background-image: url('/dashboard/static/img/icon_manage.svg');
+  background-size: 20px 20px;
+  margin: auto;
+  background-repeat: no-repeat;
+  padding-left: 30px !important;
+  margin-left: 20px;
+  display: block;
+  cursor: pointer;
+  width: 100px !important;
+  padding-right: 0px !important;
+  background-position: left;
+}
+
+.fort-iconLogout {
+  color: #484e56;
+  background-image: url('/dashboard/static/img/icon_logout.svg');
+  background-size: 20px 20px;
+  margin: auto;
+  background-repeat: no-repeat;
+  padding-left: 30px !important;
+  margin-left: 20px;
+  display: block;
+  cursor: pointer;
+  width: 100px !important;
+  padding-right: 0px !important;
+  background-position: left;
+}
+
+.fort-iconName {
+  content: "";
+  color: #484e56;
+  background-image: url('/dashboard/static/img/icon_user.svg');
+  background-size: 20px 20px;
+  background-position: center;
+  background-repeat: no-repeat;
+  margin-left: 20px;
+  display: block;
+  cursor: pointer;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background-color: #f5f5f5;
+}
+
+.fort-iconMenu {
+  content: "";
+  color: #484e56;
+  background-image: url('/dashboard/static/img/icon_menu.svg');
+  background-size: 20px 20px;
+  background-position: center;
+  background-repeat: no-repeat;
+  margin-left: 20px;
+  display: block;
+  cursor: pointer;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background-color: #f5f5f5;
+}

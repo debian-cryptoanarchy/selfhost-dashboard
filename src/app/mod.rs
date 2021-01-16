@@ -247,20 +247,26 @@ pub struct App {
 
 impl App {
     fn open_dynamic<'a, Str: Stringly>(app_name: &'a Name<Str>, user: &'a user::Authenticated) -> impl Future<Output=Result<String, OpenError>> + 'a {
+        #[cfg(not(feature = "mock_system"))]
         use std::os::unix::process::CommandExt;
         use crate::io::BufReadExt;
 
         let entry_point_path = format!("{}/{}/open", self::config::DIRS.app_entry_points, app_name);
+        #[cfg(not(feature = "mock_system"))]
         let owned_app_name = String::from(&**app_name);
         let owned_user_name = user.name().to_owned();
 
         async move {
             let mut child = tokio::task::spawn_blocking(move || -> Result<_, _> {
+                #[cfg(not(feature = "mock_system"))]
                 let system_user = users::get_user_by_name(&owned_app_name).ok_or(OpenError::SystemUserNotFound)?;
-                std::process::Command::new(&entry_point_path)
+                let mut command = std::process::Command::new(&entry_point_path);
+                #[cfg(not(feature = "mock_system"))]
+                command
+                        .uid(system_user.uid())
+                        .gid(system_user.primary_group_id());
+                command
                     .arg(owned_user_name)
-                    .uid(system_user.uid())
-                    .gid(system_user.primary_group_id())
                     .stdout(std::process::Stdio::piped())
                     .stderr(std::process::Stdio::piped())
                     .spawn()
@@ -268,7 +274,7 @@ impl App {
             }).await.map_err(OpenError::TaskJoin)??;
 
             let stdout_line = std::io::BufReader::new(child.stdout.take().expect("std Command API is retarded")).read_line_max(1024);
-            let stderr_line = std::io::BufReader::new(child.stdout.take().expect("std Command API is retarded")).read_line_max(1024);
+            let stderr_line = std::io::BufReader::new(child.stderr.take().expect("std Command API is retarded")).read_line_max(1024);
 
             let status = child.wait().map_err(|error| OpenError::EntryPointWaitFailed { app: (&**app_name).to_owned(), error, })?;
 

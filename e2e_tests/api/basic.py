@@ -24,6 +24,9 @@ try:
     apps = apps_resp.json()
     # There should be a field called apps containing a non-empty array
     val = apps["apps"][0]
+    thunderhub = session.get(uri + "/open-app/thunderhub-mainnet")
+    assert thunderhub.status_code == 404
+    assert thunderhub.url.endswith("/thunderhub?token=this_is_a_test")
     assert session.get(uri + "/logout").status_code == 200
     bad_password = session.post(uri + "/login", data = {"username": "admin", "password": "567"})
     assert bad_password.status_code == 200

@@ -62,7 +62,6 @@ impl From<&'_ app::OpenError> for Error {
     }
 }
 
-
 fn log_and_convert<E>(logger: &slog::Logger) -> impl '_ + FnOnce(E) -> Error where E: 'static + std::error::Error, for<'a> &'a E: Into<Error> {
     move |error| {
         let ret = (&error).into();

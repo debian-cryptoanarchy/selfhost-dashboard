@@ -8,5 +8,4 @@ then
 	exit 1
 fi
 
-token="`cat "/var/run/thunderhub-system-$network/sso/cookie"`" || exit 2
-echo -n "?token=$token"
+echo -n "?token=this_is_a_test"

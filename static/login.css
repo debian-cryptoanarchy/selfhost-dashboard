@@ -136,3 +136,15 @@ body {
 .fort-right {
   background-color: #ffffff;
 }
+
+.fort-red {
+  background-color: red !important;
+}
+
+#fort-loginRePass {
+  display: none;
+}
+
+#fort-info {
+  display: none;
+}

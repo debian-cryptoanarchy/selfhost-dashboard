@@ -27,6 +27,8 @@ body {
 
 .navbar {
   padding-left: 10px !important;
+  padding-top: 8px !important;
+
 }
 
 .nav-link {

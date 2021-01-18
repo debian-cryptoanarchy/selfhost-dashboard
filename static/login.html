@@ -27,7 +27,7 @@
 						<div class="col-md-6">
 							<h3 class="fort-loginHeader">Login into your fortress</h3>
 							<div class="toast d-flex align-items-right text-white border-0" role="alert" aria-live="assertive" aria-atomic="true">
-								<div class="toast-body">
+								<div class="toast-body" id="fort-warning">
 									Alpha version. Work in progess...
 								</div>
 							</div>
@@ -37,7 +37,7 @@
 									<div class="input-group-prepend">
 										<span class="input-group-text" id="fort-name"><img src="/dashboard/static/img/icon_user.svg" alt="" width="15" class="d-inline-block align-top"></span>
 									</div>
-									<input type="text" class="form-control" id="username" name="username" placeholder="Enter your name" aria-label="Username" aria-describedby="fort-name" > 
+									<input type="text" class="form-control" id="username" name="username" placeholder="admin" aria-label="Username" aria-describedby="fort-name" value="admin" readonly> 
 								</div>
 								<span>Password</span>
 								<div class="input-group fort-loginPass">
@@ -46,7 +46,16 @@
 									</div>
 									<input type="password" class="form-control" id="inputPassword" name="password" placeholder="Enter your password" aria-label="Password" aria-describedby="fort-password" >
 								</div>
-								<button class="btn btn-primary fort-loginBtn" onclick="toggleBtn()" type="submit">Login</button>
+								<div class="input-group fort-loginPass" id="fort-loginRePass">
+									<div class="input-group-prepend">
+										<span class="input-group-text" id="fort-password"><img src="/dashboard/static/img/icon_lock.svg" alt="" width="15" class="d-inline-block align-top"></span>
+									</div>
+									<input onchange="checkInput()" type="password" class="form-control" id="inputRePassword" name="re-password" placeholder="Re-Enter your password" aria-label="Re-Password" aria-describedby="fort-password" >
+								</div>
+								<div class="alert alert-info" id="fort-info">
+									<strong>Passwords do not match. Please try again!</strong> 
+								  </div>
+								<button class="btn btn-primary fort-loginBtn" id="fort-loginBtnMain" onclick="toggleBtn()" type="submit">Login</button>
 								<button class="btn btn-primary fort-loginBtn" id="fort-loginBtnAlt" type="button" disabled>
 									<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
 									Login...
@@ -59,13 +68,6 @@
 				</div>
 			</div>
 		</div>
-		<script type="application/javascript">
-			toggleBtn = function(){
-				var btn = document.getElementsByClassName("fort-loginBtn")[0];
-				btn.style.display = "none";
-				var btn = document.getElementById("fort-loginBtnAlt");
-				btn.style.display = "block";
-			}
-		</script>
+		<script src="/dashboard/static/login.js"></script>
 	</body>
 </html>

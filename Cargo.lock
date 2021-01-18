@@ -1095,7 +1095,7 @@ dependencies = [
 
 [[package]]
 name = "selfhost-dashboard"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "configure_me",
  "configure_me_codegen",

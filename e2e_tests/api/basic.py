@@ -4,12 +4,21 @@ import requests
 import subprocess
 import time
 
+def assert_running(process):
+    try:
+        code = process.wait(1)
+        raise Exception("Server died with return code %d" % code)
+    except subprocess.TimeoutExpired:
+        pass
+
 port = 4242
 
-server = subprocess.Popen(["cargo", "run", "--features=mock_system", "--", "--bind-port", str(port), "--pg-uri=x"])
+server = subprocess.Popen(["cargo", "run", "--manifest-path", "selfhost-dashboard/Cargo.toml", "--features=mock_system", "--", "--bind-port", str(port), "--pg-uri=x"])
 
 try:
     time.sleep(3)
+    # Check that the server started
+    assert_running(server)
 
     uri = "http://localhost:" + str(port) + "/dashboard"
 
@@ -35,5 +44,10 @@ try:
     assert bad_input.status_code == 200
     assert bad_input.url.endswith("#failure=input")
 
+    sleep(1)
+    # Check that the server didn't die during test
+    assert_running(server)
+
 finally:
-    server.kill()
+    if server.returncode is None:
+        server.kill()

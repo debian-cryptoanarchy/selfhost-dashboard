@@ -1,0 +1,44 @@
+[package]
+name = "selfhost-dashboard"
+version = "0.2.0"
+authors = ["Martin Habovstiak <martin.habovstiak@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[features]
+default = []
+# for development only!!!
+mock_system = []
+
+[dependencies]
+hex = "0.4.2"
+serde = "1.0.116"
+serde_derive = "1.0.116"
+scrypt = { version = "0.4.1", default_features = false }
+rand = "0.7.3"
+void = "1.0.2"
+thiserror = "1.0.20"
+tokio = { version = "0.2.22", features = ["macros"] }
+toml = "0.5.6"
+serde_json = "1.0.58"
+configure_me = "0.4.0"
+tokio-postgres = "0.5.5"
+futures = "0.3.6"
+hyper = "0.13.8"
+http = "0.2.1"
+slog = "2.7.0"
+sloggers = "1.0.1"
+url = "2.1.1"
+serde_yaml = "0.8.13"
+users = "0.11.0"
+
+[dev-dependencies]
+hmap = "0.1"
+tokio-test = "0.2.1"
+
+[build-dependencies]
+configure_me_codegen = "0.4.0"
+
+[package.metadata.configure_me]
+spec = "config_spec.toml"

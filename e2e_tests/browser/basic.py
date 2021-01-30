@@ -50,7 +50,7 @@ try:
     driver.find_element_by_name("password").send_keys("123")
     driver.find_element_by_name("password").send_keys(Keys.RETURN)
 
-    sleep(1)
+    time.sleep(1)
     # Check that the server didn't die during test
     assert_running(server)
 

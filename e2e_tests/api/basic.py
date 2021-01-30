@@ -44,7 +44,7 @@ try:
     assert bad_input.status_code == 200
     assert bad_input.url.endswith("#failure=input")
 
-    sleep(1)
+    time.sleep(1)
     # Check that the server didn't die during test
     assert_running(server)
 

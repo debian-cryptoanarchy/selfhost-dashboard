@@ -6,6 +6,9 @@ use std::pin::Pin;
 use std::future::Future;
 use crate::user::{self, types::AuthToken};
 use crate::primitives::Stringly;
+use tokio_postgres::tls::{MakeTlsConnect, TlsConnect};
+use tokio_postgres::Socket;
+use deadpool_postgres::PoolError;
 
 macro_rules! deser_row {
     ($row:expr, $($field:ident$(: $type:ty)?),*) => {
@@ -15,56 +18,51 @@ macro_rules! deser_row {
     };
 }
 
-#[derive(Debug, Clone)]
-pub struct Database<T> where T: Borrow<tokio_postgres::Client> {
-    client: T,
+#[derive(Clone)]
+pub struct Database {
+    client: deadpool_postgres::Pool,
 }
 
-impl<T> Database<T> where T: Borrow<tokio_postgres::Client> {
-    pub fn new(client: T) -> Self {
-        Database {
-            client,
-        }
+impl Database {
+    pub fn connect<T>(connection_string: &str, tls: T) -> Result<Self, tokio_postgres::Error> where T: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static, T::Stream: Send + Sync, T::TlsConnect: Send + Sync, <T::TlsConnect as TlsConnect<Socket>>::Future: Send {
+        Ok(Database { client: deadpool_postgres::Pool::new(deadpool_postgres::Manager::from_config(connection_string.parse()?, tls, Default::default()), 8) })
     }
 }
 
-impl<C> Database<C> where C: Borrow<tokio_postgres::Client> + From<tokio_postgres::Client> {
-    pub async fn connect<T>(connection_string: &str, tls: T) -> Result<(Self, tokio_postgres::Connection<tokio_postgres::Socket, T::Stream>), tokio_postgres::Error> where T: tokio_postgres::tls::MakeTlsConnect<tokio_postgres::Socket> {
-        tokio_postgres::connect(connection_string, tls)
-            .await
-            .map(|(client, conn)| (Database::new(client.into()), conn))
-    }
-}
+impl Database {
+    pub fn init_tables(&self) -> impl '_ + Future<Output=Result<(), PoolError>> {
+        // client contains Arc
+        let client = self.client.clone();
 
-impl<T> Database<T> where T: 'static + Borrow<tokio_postgres::Client> + Clone + Send + Sync {
-    pub fn init_tables(&self) -> impl Future<Output=Result<(), tokio_postgres::Error>> {
-        let this = self.clone();
         async move {
-            this
-                .client
-                .borrow()
+            client
+                .get()
+                .await?
                 .batch_execute("CREATE TABLE IF NOT EXISTS users (name VARCHAR PRIMARY KEY, hardened_password BYTEA, salt BYTEA, auth_token BYTEA)")
                 .await
+                .map_err(Into::into)
         }
     }
 }
 
 type PinnedSendFutureResult<T, E> = Pin<Box<dyn Future<Output=Result<T, E>> + Send>>;
 
-impl<T> user::Db for Database<T> where T: 'static + Borrow<tokio_postgres::Client> + Clone + Send + Sync {
-    type GetUserError = tokio_postgres::Error;
-    type InsertUserError = tokio_postgres::Error;
-    type SetCookieError = tokio_postgres::Error;
+impl user::Db for Database {
+    type GetUserError = PoolError;
+    type InsertUserError = PoolError;
+    type SetCookieError = PoolError;
     type GetUserFuture = PinnedSendFutureResult<Option<user::DbRecord>, Self::GetUserError>;
     type InsertUserFuture = PinnedSendFutureResult<(), user::InsertError<Self::InsertUserError>>;
     type SetCookieFuture = PinnedSendFutureResult<(), Self::SetCookieError>;
 
     fn get_user<S: 'static + Stringly + Send + Sync>(&mut self, name: user::Name<S>) -> Self::GetUserFuture {
-        let this = self.clone();
+        // client contains Arc
+        let client = self.client.clone();
 
         Box::pin(async move {
-            let row = this
-                .client
+            let row = client
+                .get()
+                .await?
                 .borrow()
                 .query_opt("SELECT * FROM users WHERE name = $1", &[&name])
                 .await?;
@@ -85,25 +83,31 @@ impl<T> user::Db for Database<T> where T: 'static + Borrow<tokio_postgres::Clien
     }
 
     fn insert_new_user(&mut self, record: user::DbRecord) -> Self::InsertUserFuture {
-        let this = self.clone();
+        // client contains Arc
+        let client = self.client.clone();
 
         Box::pin(async move {
-            this
-                .client
+            client
+                .get()
+                .await
+                .map_err(user::InsertError::DatabaseError)?
                 .borrow()
                 .query("INSERT INTO users (name, hardened_password, salt, auth_token) VALUES ($1, $2, $3, $4)", &[&record.name, &record.hardened_password, &record.salt, &record.cookie])
                 .await
+                .map_err(Into::into)
                 .map_err(user::InsertError::DatabaseError)?;
             Ok(())
         })
     }
 
     fn set_cookie<S: 'static + Stringly + Send + Sync>(&mut self, name: user::Name<S>, value: Option<AuthToken>) -> Self::SetCookieFuture {
-        let this = self.clone();
+        // client contains Arc
+        let client = self.client.clone();
 
         Box::pin(async move {
-            this
-                .client
+            client
+                .get()
+                .await?
                 .borrow()
                 .query("UPDATE users SET auth_token = $1 WHERE name = $2", &[&value, &name])
                 .await?;
@@ -111,5 +115,3 @@ impl<T> user::Db for Database<T> where T: 'static + Borrow<tokio_postgres::Clien
         })
     }
 }
-
-pub type ArcDatabase = Database<std::sync::Arc<tokio_postgres::Client>>;

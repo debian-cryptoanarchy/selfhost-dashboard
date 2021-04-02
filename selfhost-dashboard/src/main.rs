@@ -124,12 +124,8 @@ async fn main() {
     let request_logger = logger.clone();
 
     #[cfg(not(feature = "mock_system"))]
-    let (db_client, db_connection) = postgres_impl::ArcDatabase::connect(&config.pg_uri, tokio_postgres::tls::NoTls)
-        .await
+    let db_client = postgres_impl::Database::connect(&config.pg_uri, tokio_postgres::tls::NoTls)
         .die_on_error(&logger, "Failed to connect to the database");
-
-    #[cfg(not(feature = "mock_system"))]
-    let db_connection_join_handle = tokio::spawn(db_connection);
 
     #[cfg(feature = "mock_system")]
     let db_client = mock_db::Db::default();
@@ -158,16 +154,5 @@ async fn main() {
         }
     };
 
-    #[cfg(not(feature = "mock_system"))]
-    let db_connection_join_handle = async {
-        if let Err(error) = db_connection_join_handle.await {
-            error!(logger, "database error"; "error" => #error);
-        }
-    };
-
-    #[cfg(not(feature = "mock_system"))]
-    futures::join!(server, db_connection_join_handle);
-
-    #[cfg(feature = "mock_system")]
     server.await
 }

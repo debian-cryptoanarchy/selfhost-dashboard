@@ -16,15 +16,15 @@ This provides a simple dashboard for users to launch apps.
 
 ### TODO
 
-- [ ] proper frontend
+- [x] proper frontend
 - [x] icon paths
 - [x] opening dynamic apps
 - [x] logout
 - [ ] change password
-- [ ] more tests
+- [x] more tests
 - [ ] cleanup (fix clean architecture)
 - [ ] more doc
-- [ ] integrate into the repository (already in `experimental`)
+- [x] integrate into the repository (already in `experimental`)
 - [x] migrate existing apps to use the dashboard
 
 ## Testing

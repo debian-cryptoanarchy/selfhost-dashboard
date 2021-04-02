@@ -32,6 +32,7 @@ sloggers = "1.0.1"
 url = "2.1.1"
 serde_yaml = "0.8.13"
 users = "0.11.0"
+deadpool-postgres = { version = "0.5.5", default_features = false }
 
 [dev-dependencies]
 hmap = "0.1"

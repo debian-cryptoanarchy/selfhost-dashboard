@@ -19,7 +19,7 @@ scrypt = { version = "0.4.1", default_features = false }
 rand = "0.7.3"
 void = "1.0.2"
 thiserror = "1.0.20"
-tokio = { version = "0.2.22", features = ["macros"] }
+tokio = { version = "1.18.5", features = ["macros"] }
 toml = "0.5.6"
 serde_json = "1.0.58"
 configure_me = "0.4.0"
